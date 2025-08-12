@@ -16,7 +16,7 @@ import javax.swing.JPanel
 /**
  * Dialog for entering GitHub token.
  */
-class LoginDialog(private val project: Project) : DialogWrapper(project) {
+class LoginDialog(project: Project) : DialogWrapper(project) {
     private val tokenField = JBTextField(GithubRepositoryExplorer.message("ui.textField.tokenSize").toInt())
 
     init {
@@ -25,7 +25,7 @@ class LoginDialog(private val project: Project) : DialogWrapper(project) {
         title = GithubRepositoryExplorer.message("loginDialog.title")
         thisLogger().info("Login dialog initialized")
 
-        val existingToken = UserDataService.service(project).token
+        val existingToken = UserDataService.service().token
         if (existingToken.isNotEmpty()) {
             tokenField.text = existingToken
             thisLogger().info("Existing token loaded")
@@ -67,7 +67,7 @@ class LoginDialog(private val project: Project) : DialogWrapper(project) {
 
     override fun doOKAction() {
         val token = tokenField.text.trim()
-        project.getService(UserDataService::class.java).state.token = token
+        UserDataService.service().token = token
         thisLogger().info("GitHub token saved successfully")
         close(OK_EXIT_CODE)
     }

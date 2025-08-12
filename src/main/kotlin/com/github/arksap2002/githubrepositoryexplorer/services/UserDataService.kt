@@ -4,12 +4,11 @@ import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
-import com.intellij.openapi.project.Project
 
 /**
- * Service responsible for managing user-specific data, such as a GitHub token, within a project.
+ * Service responsible for managing user-specific data, such as a GitHub token, at the application level.
  */
-@Service(Service.Level.PROJECT)
+@Service(Service.Level.APP)
 @State(name = "UserData", storages = [Storage("UserData.xml")])
 class UserDataService : PersistentStateComponent<UserDataState> {
     private var userDataState: UserDataState = UserDataState()
@@ -21,7 +20,17 @@ class UserDataService : PersistentStateComponent<UserDataState> {
     }
 
     companion object {
-        fun service(project: Project) = project.getService(UserDataService::class.java).state
+        fun service() = com.intellij.openapi.application.ApplicationManager.getApplication()
+            .getService(UserDataService::class.java).state
+
+        /**
+         * Checks if a user is currently logged in by verifying if the token is not empty.
+         * @return true if the user is logged in, false otherwise
+         */
+        fun isUserLoggedIn(): Boolean {
+            val token = service().token
+            return token.isNotEmpty()
+        }
     }
 }
 

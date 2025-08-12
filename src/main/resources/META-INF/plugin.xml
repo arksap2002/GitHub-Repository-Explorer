@@ -16,6 +16,8 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
             <action id="GithubRepositoryExplorer.Login" 
                     class="com.github.arksap2002.githubrepositoryexplorer.actions.LoginAction"/>
+            <action id="GithubRepositoryExplorer.Logout"
+                    class="com.github.arksap2002.githubrepositoryexplorer.actions.LogoutAction"/>
             <action id="GithubRepositoryExplorer.OpenRepo"
                     class="com.github.arksap2002.githubrepositoryexplorer.actions.OpenRepoAction"/>
         </group>

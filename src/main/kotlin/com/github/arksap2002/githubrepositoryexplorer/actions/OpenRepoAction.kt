@@ -17,13 +17,7 @@ class OpenRepoAction : AnAction() {
     }
 
     override fun update(e: AnActionEvent) {
-        val project = e.project
-        if (project != null) {
-            val token = UserDataService.service(project).token
-            e.presentation.isVisible = token.isNotEmpty()
-        } else {
-            e.presentation.isVisible = false
-        }
+        e.presentation.isVisible = UserDataService.isUserLoggedIn()
     }
 
     override fun actionPerformed(e: AnActionEvent) {

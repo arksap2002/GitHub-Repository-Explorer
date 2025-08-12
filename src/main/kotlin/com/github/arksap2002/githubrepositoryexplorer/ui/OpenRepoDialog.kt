@@ -57,7 +57,7 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
     private fun validateRepositoryWithProgress() {
         val owner = ownerField.text.trim()
         val name = nameField.text.trim()
-        val token = UserDataService.service(project).token
+        val token = UserDataService.service().token
         val url = "https://api.github.com/repos/$owner/$name/contents/"
 
         object : Task.Backgroundable(
