@@ -9,6 +9,7 @@ intelliJPlatform = "2.7.1"
 kotlin = "2.2.0"
 kover = "0.9.1"
 qodana = "2025.1.1"
+kotlinSerialization = "2.2.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -18,5 +19,6 @@ opentest4j = { group = "org.opentest4j", name = "opentest4j", version.ref = "ope
 changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
 intelliJPlatform = { id = "org.jetbrains.intellij.platform", version.ref = "intelliJPlatform" }
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinSerialization" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 qodana = { id = "org.jetbrains.qodana", version.ref = "qodana" }
