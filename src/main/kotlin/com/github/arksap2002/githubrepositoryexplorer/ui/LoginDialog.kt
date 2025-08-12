@@ -17,7 +17,7 @@ import javax.swing.JPanel
  * Dialog for entering GitHub token.
  */
 class LoginDialog(private val project: Project) : DialogWrapper(project) {
-    private val tokenField = JBTextField(40)
+    private val tokenField = JBTextField(GithubRepositoryExplorer.message("ui.textField.tokenSize").toInt())
 
     init {
         init()

@@ -19,8 +19,8 @@ import javax.swing.JPanel
  * Dialog for entering GitHub repository information.
  */
 class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
-    private val ownerField = JBTextField(20)
-    private val nameField = JBTextField(20)
+    private val ownerField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
+    private val nameField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private var repoStructureJson: String? = null
 
     init {
