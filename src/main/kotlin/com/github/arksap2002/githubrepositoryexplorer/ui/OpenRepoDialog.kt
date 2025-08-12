@@ -82,6 +82,8 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
                     errorMessage = e.message
                     isValid = false
                     thisLogger().warn("Repository validation failed: $owner/$name - ${e.message}")
+                } finally {
+                    okAction.isEnabled = true
                 }
             }
 
@@ -103,5 +105,6 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
 
     override fun doOKAction() {
         validateRepositoryWithProgress()
+        okAction.isEnabled = false
     }
 }
