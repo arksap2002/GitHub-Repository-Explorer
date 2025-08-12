@@ -50,26 +50,33 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
 
     /**
      * Returns the repository structure as a JSON string.
-     * This is available only after a successful validation.
      */
-    fun getRepoStructureJson(): String? = repoStructureJson
+    fun getRepoStructureJson(): String? {
+        return repoStructureJson
+    }
     
     /**
      * Returns the repository owner.
      */
-    fun getRepoOwner(): String = ownerField.text.trim()
+    fun getRepoOwner(): String {
+        return ownerField.text.trim()
+    }
     
     /**
      * Returns the repository name.
      */
-    fun getRepoName(): String = nameField.text.trim()
+    fun getRepoName(): String {
+        return nameField.text.trim()
+    }
 
     private fun validateRepositoryWithProgress() {
+        // Get repository information and token
         val owner = ownerField.text.trim()
         val name = nameField.text.trim()
         val token = UserDataService.service().token
         val url = "https://api.github.com/repos/$owner/$name/contents/"
 
+        // Create a background task for repository validation
         object : Task.Backgroundable(
             project,
             GithubRepositoryExplorer.message("repoDialog.validation.title"),
@@ -79,16 +86,19 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
             private var errorMessage: String? = null
 
             override fun run(indicator: ProgressIndicator) {
+                // Set up a progress indicator
                 indicator.isIndeterminate = true
                 indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
                 thisLogger().info("Validating repository: $owner/$name")
                 
                 try {
+                    // Make API request to validate repository
                     val response = GitHubApiUtils.makeGetRequest(token, url)
                     repoStructureJson = response
                     isValid = true
                     thisLogger().info("Repository validation successful: $owner/$name")
                 } catch (e: Exception) {
+                    // Handle validation failure
                     errorMessage = e.message
                     isValid = false
                     thisLogger().warn("Repository validation failed: $owner/$name - ${e.message}")
@@ -99,9 +109,11 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
 
             override fun onSuccess() {
                 if (isValid) {
+                    // Handle successful validation
                     thisLogger().info("Repository dialog completed successfully")
                     super@OpenRepoDialog.doOKAction()
                 } else {
+                    // Show error message for failed validation
                     thisLogger().warn("Repository dialog failed: $errorMessage")
                     Messages.showErrorDialog(
                         project,

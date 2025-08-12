@@ -25,14 +25,17 @@ class LogoutAction : AnAction() {
 
         val project = e.project ?: return
 
+        // Check if a user is not logged in
         if (!UserDataService.isUserLoggedIn()) {
             thisLogger().info("User is not logged in, nothing to do")
             return
         }
 
+        // Clear the GitHub token
         UserDataService.service().token = ""
         thisLogger().info("GitHub token cleared successfully")
 
+        // Show a success message to the user
         Messages.showInfoMessage(
             project,
             GithubRepositoryExplorer.message("logout.success.message"),

@@ -19,7 +19,7 @@ import kotlinx.serialization.json.Json
 object GitHubApiUtils {
     /**
      * Makes a GET request to the given URL using the provided token and returns the fetched repository structure
-     * as a JSON string. Throws exceptions for specific HTTP response errors or failures.
+     * as a JSON string.
      *
      * @param token The GitHub personal access token to authenticate the request.
      * @param url The URL for the GitHub API endpoint to fetch the repository contents.
@@ -30,12 +30,15 @@ object GitHubApiUtils {
         thisLogger().info("Making GET request to GitHub API: $url")
         return runBlocking {
             val client = HttpClient(CIO)
+
             try {
+                // Fetch repository structure and convert to JSON
                 val fileTree = fetchDirectoryContents(client, url, "", token)
                 val result = Json.encodeToString(fileTree)
                 thisLogger().info("Successfully fetched repository structure")
                 result
             } catch (e: ClientRequestException) {
+                // Handle specific HTTP error responses
                 when (e.response.status.value) {
                     404 -> {
                         thisLogger().warn("Repository not found: $url")
@@ -48,6 +51,7 @@ object GitHubApiUtils {
                     }
                 }
             } catch (e: Exception) {
+                // Handle general exceptions
                 thisLogger().error("Failed to fetch repository structure", e)
                 throw Exception("Failed to fetch repository structure: ${e.message}")
             } finally {
@@ -64,17 +68,19 @@ object GitHubApiUtils {
     ): List<FileTreeNode> {
         val url = if (path.isEmpty()) baseUrl else "$baseUrl$path"
 
+        // Make the API request with authentication
         val response: HttpResponse = client.get(url) {
             header("Authorization", "Bearer $token")
             header("Accept", "application/json")
         }
 
+        // Parse the JSON response
         val responseText = response.bodyAsText()
         val json = Json { ignoreUnknownKeys = true }
-
         val contents = json.decodeFromString<List<GitHubContent>>(responseText)
         val result = mutableListOf<FileTreeNode>()
 
+        // Build the file tree structure with recursive directory traversal
         for (content in contents) {
             val node = FileTreeNode(
                 name = content.name,
@@ -82,6 +88,7 @@ object GitHubApiUtils {
                 type = content.type
             )
 
+            // Recursively fetch contents of directories
             if (content.type == "dir") {
                 node.children.addAll(fetchDirectoryContents(client, baseUrl, content.path, token))
             }
@@ -102,9 +109,9 @@ object GitHubApiUtils {
         thisLogger().info("Validating GitHub token")
         return runBlocking {
             try {
+                // Initialize the HTTP client and set up an API request
                 val url = "https://api.github.com/user"
                 val client = HttpClient(CIO)
-
                 val response: HttpResponse = client.get(url) {
                     header("Authorization", "Bearer $token")
                     header("Accept", "application/json")
@@ -112,12 +119,14 @@ object GitHubApiUtils {
 
                 client.close()
 
+                // Check if response status indicates success
                 val isValid = response.status.value in 200..299
                 if (isValid) {
                     thisLogger().info("GitHub token validation successful")
                 } else {
                     thisLogger().warn("GitHub token validation failed: HTTP ${response.status.value}")
                 }
+
                 isValid
             } catch (e: Exception) {
                 thisLogger().warn("GitHub token validation failed with exception", e)

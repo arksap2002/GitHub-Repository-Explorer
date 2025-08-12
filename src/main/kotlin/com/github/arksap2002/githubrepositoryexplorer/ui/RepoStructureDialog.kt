@@ -32,38 +32,33 @@ class RepoStructureDialog(
         // Parse the JSON string into a list of FileTreeNode objects
         val json = Json { ignoreUnknownKeys = true }
         val fileTreeNodes = json.decodeFromString<List<FileTreeNode>>(repoStructureJson)
-        
-        // Create the root node for the tree
+
+        // Build the tree structure by recursively adding nodes
         val rootNode = DefaultMutableTreeNode("$repoName Repository")
-        
-        // Build the tree structure
         buildTreeNodes(rootNode, fileTreeNodes)
-        
-        // Create the tree with the root node
+
+        // Create the tree with the root node and make it visible
         val tree = Tree(DefaultTreeModel(rootNode))
         tree.isRootVisible = true
-        
+
         // Create a scroll pane for the tree
         val scrollPane = JBScrollPane(tree)
-        scrollPane.preferredSize = Dimension(600, 400)
-        
+        val width = GithubRepositoryExplorer.message("ui.repoStructureDialog.width").toInt()
+        val height = GithubRepositoryExplorer.message("ui.repoStructureDialog.height").toInt()
+        scrollPane.preferredSize = Dimension(width, height)
+
         return scrollPane
     }
 
-    /**
-     * Recursively builds the tree structure from FileTreeNode objects.
-     */
     private fun buildTreeNodes(parentNode: DefaultMutableTreeNode, fileTreeNodes: List<FileTreeNode>) {
-        // Sort nodes: directories first, then files, both alphabetically
         val sortedNodes = fileTreeNodes.sortedWith(
             compareBy<FileTreeNode> { it.type != "dir" }.thenBy { it.name.lowercase() }
         )
-        
         for (node in sortedNodes) {
             val treeNode = DefaultMutableTreeNode(node.name)
             parentNode.add(treeNode)
-            
-            // If this is a directory, add its children recursively
+
+            // If this is a directory with children, add its children recursively
             if (node.type == "dir" && node.children.isNotEmpty()) {
                 buildTreeNodes(treeNode, node.children)
             }

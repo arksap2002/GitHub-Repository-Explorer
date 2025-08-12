@@ -26,17 +26,20 @@ class OpenRepoAction : AnAction() {
 
         val project = e.project ?: return
 
+        // Show a dialog to enter repository details
         val dialog = OpenRepoDialog(project)
         if (dialog.showAndGet()) {
+            // Get repository information from the dialog
             val repoStructureJson = dialog.getRepoStructureJson()
             val repoOwner = dialog.getRepoOwner()
             val repoName = dialog.getRepoName()
-            
+
             if (repoStructureJson != null) {
+                // Create and show the repository structure dialog
                 val repoFullName = "$repoOwner/$repoName"
                 val structureDialog = RepoStructureDialog(project, repoStructureJson, repoFullName)
                 structureDialog.show()
-                
+
                 thisLogger().info("Repository structure dialog shown for: $repoFullName")
             } else {
                 thisLogger().warn("Repository structure JSON is null for: $repoOwner/$repoName")

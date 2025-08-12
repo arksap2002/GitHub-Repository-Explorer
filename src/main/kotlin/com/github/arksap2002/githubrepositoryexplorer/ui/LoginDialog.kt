@@ -22,9 +22,11 @@ class LoginDialog(project: Project) : DialogWrapper(project) {
     init {
         init()
 
+        // Set the dialog title
         title = GithubRepositoryExplorer.message("loginDialog.title")
         thisLogger().info("Login dialog initialized")
 
+        // Load existing token if available
         val existingToken = UserDataService.service().token
         if (existingToken.isNotEmpty()) {
             tokenField.text = existingToken
@@ -67,8 +69,11 @@ class LoginDialog(project: Project) : DialogWrapper(project) {
 
     override fun doOKAction() {
         val token = tokenField.text.trim()
+        
+        // Save the token to the service
         UserDataService.service().token = token
         thisLogger().info("GitHub token saved successfully")
+        
         close(OK_EXIT_CODE)
     }
 }
