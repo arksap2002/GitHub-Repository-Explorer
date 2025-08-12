@@ -53,6 +53,16 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
      * This is available only after a successful validation.
      */
     fun getRepoStructureJson(): String? = repoStructureJson
+    
+    /**
+     * Returns the repository owner.
+     */
+    fun getRepoOwner(): String = ownerField.text.trim()
+    
+    /**
+     * Returns the repository name.
+     */
+    fun getRepoName(): String = nameField.text.trim()
 
     private fun validateRepositoryWithProgress() {
         val owner = ownerField.text.trim()

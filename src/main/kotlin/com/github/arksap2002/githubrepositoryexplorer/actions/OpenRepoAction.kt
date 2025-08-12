@@ -3,6 +3,7 @@ package com.github.arksap2002.githubrepositoryexplorer.actions
 import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
 import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
 import com.github.arksap2002.githubrepositoryexplorer.ui.OpenRepoDialog
+import com.github.arksap2002.githubrepositoryexplorer.ui.RepoStructureDialog
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -28,10 +29,18 @@ class OpenRepoAction : AnAction() {
         val dialog = OpenRepoDialog(project)
         if (dialog.showAndGet()) {
             val repoStructureJson = dialog.getRepoStructureJson()
-
-            println(repoStructureJson)
-
-            thisLogger().info("Repository structure retrieved: $repoStructureJson")
+            val repoOwner = dialog.getRepoOwner()
+            val repoName = dialog.getRepoName()
+            
+            if (repoStructureJson != null) {
+                val repoFullName = "$repoOwner/$repoName"
+                val structureDialog = RepoStructureDialog(project, repoStructureJson, repoFullName)
+                structureDialog.show()
+                
+                thisLogger().info("Repository structure dialog shown for: $repoFullName")
+            } else {
+                thisLogger().warn("Repository structure JSON is null for: $repoOwner/$repoName")
+            }
         }
     }
 
