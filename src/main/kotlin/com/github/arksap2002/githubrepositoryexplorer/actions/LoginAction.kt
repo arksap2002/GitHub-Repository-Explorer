@@ -28,6 +28,7 @@ class LoginAction : AnAction() {
         val project = e.project ?: return
 
         if (UserDataService.isUserLoggedIn()) {
+            // Log and show notification that the user is already logged in
             thisLogger().info("User is already logged in, showing notification")
             Messages.showInfoMessage(
                 project,
@@ -37,11 +38,13 @@ class LoginAction : AnAction() {
             return
         }
 
+        // Show login dialog if user is not logged in
         showLoginDialog(project)
     }
 
     private fun showLoginDialog(project: Project) {
         val dialog = LoginDialog(project)
+
         if (dialog.showAndGet()) {
             thisLogger().info("GitHub token saved successfully")
         }
