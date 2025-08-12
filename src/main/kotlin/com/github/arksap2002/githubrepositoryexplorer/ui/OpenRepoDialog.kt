@@ -3,6 +3,7 @@ package com.github.arksap2002.githubrepositoryexplorer.ui
 import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
 import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
 import com.github.arksap2002.githubrepositoryexplorer.utils.GitHubApiUtils
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -18,13 +19,14 @@ import javax.swing.JPanel
  * Dialog for entering GitHub repository information.
  */
 class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
-    private val ownerField = JBTextField(20)
-    private val nameField = JBTextField(20)
+    private val ownerField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
+    private val nameField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private var repoStructureJson: String? = null
 
     init {
         init()
         title = GithubRepositoryExplorer.message("repoDialog.title")
+        thisLogger().info("Repository dialog initialized")
     }
 
     override fun createCenterPanel(): JComponent {
@@ -69,21 +71,28 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
+                thisLogger().info("Validating repository: $owner/$name")
                 
                 try {
                     val response = GitHubApiUtils.makeGetRequest(token, url)
                     repoStructureJson = response
                     isValid = true
+                    thisLogger().info("Repository validation successful: $owner/$name")
                 } catch (e: Exception) {
                     errorMessage = e.message
                     isValid = false
+                    thisLogger().warn("Repository validation failed: $owner/$name - ${e.message}")
+                } finally {
+                    okAction.isEnabled = true
                 }
             }
 
             override fun onSuccess() {
                 if (isValid) {
+                    thisLogger().info("Repository dialog completed successfully")
                     super@OpenRepoDialog.doOKAction()
                 } else {
+                    thisLogger().warn("Repository dialog failed: $errorMessage")
                     Messages.showErrorDialog(
                         project,
                         GithubRepositoryExplorer.message("repoDialog.error.invalidRepo"),
@@ -96,5 +105,6 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
 
     override fun doOKAction() {
         validateRepositoryWithProgress()
+        okAction.isEnabled = false
     }
 }

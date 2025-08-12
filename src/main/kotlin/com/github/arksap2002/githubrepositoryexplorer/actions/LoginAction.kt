@@ -9,7 +9,6 @@ import com.intellij.openapi.project.Project
 
 /**
  * Action that provides login functionality for GitHub Repository Explorer.
- * This action is registered in the Tools menu.
  */
 class LoginAction : AnAction() {
     init {
