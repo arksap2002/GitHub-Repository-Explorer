@@ -1,6 +1,6 @@
 package com.github.arksap2002.githubrepositoryexplorer.utils
 
-import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.diagnostic.thisLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.ClientRequestException
@@ -17,8 +17,6 @@ import kotlinx.serialization.json.Json
  * Utility class for GitHub API interactions.
  */
 object GitHubApiUtils {
-    private val logger = Logger.getInstance(GitHubApiUtils::class.java)
-
     /**
      * Makes a GET request to the given URL using the provided token and returns the fetched repository structure
      * as a JSON string. Throws exceptions for specific HTTP response errors or failures.
@@ -29,17 +27,28 @@ object GitHubApiUtils {
      * @throws Exception if the repository is not found (HTTP 404) or other errors occur during the request.
      */
     fun makeGetRequest(token: String, url: String): String {
+        thisLogger().info("Making GET request to GitHub API: $url")
         return runBlocking {
             val client = HttpClient(CIO)
             try {
                 val fileTree = fetchDirectoryContents(client, url, "", token)
-                Json.encodeToString(fileTree)
+                val result = Json.encodeToString(fileTree)
+                thisLogger().info("Successfully fetched repository structure")
+                result
             } catch (e: ClientRequestException) {
                 when (e.response.status.value) {
-                    404 -> throw Exception("Repository not found")
-                    else -> throw Exception("GitHub API error: ${e.response.status.value} - ${e.message}")
+                    404 -> {
+                        thisLogger().warn("Repository not found: $url")
+                        throw Exception("Repository not found")
+                    }
+
+                    else -> {
+                        thisLogger().error("GitHub API error: ${e.response.status.value} - ${e.message}")
+                        throw Exception("GitHub API error: ${e.response.status.value} - ${e.message}")
+                    }
                 }
             } catch (e: Exception) {
+                thisLogger().error("Failed to fetch repository structure", e)
                 throw Exception("Failed to fetch repository structure: ${e.message}")
             } finally {
                 client.close()
@@ -90,6 +99,7 @@ object GitHubApiUtils {
      * @return true if the token is valid, false otherwise
      */
     fun isTokenValid(token: String): Boolean {
+        thisLogger().info("Validating GitHub token")
         return runBlocking {
             try {
                 val url = "https://api.github.com/user"
@@ -102,9 +112,15 @@ object GitHubApiUtils {
 
                 client.close()
 
-                response.status.value in 200..299
+                val isValid = response.status.value in 200..299
+                if (isValid) {
+                    thisLogger().info("GitHub token validation successful")
+                } else {
+                    thisLogger().warn("GitHub token validation failed: HTTP ${response.status.value}")
+                }
+                isValid
             } catch (e: Exception) {
-                logger.error("Error validating GitHub token", e)
+                thisLogger().warn("GitHub token validation failed with exception", e)
                 false
             }
         }

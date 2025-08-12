@@ -6,6 +6,9 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.project.Project
 
+/**
+ * Service responsible for managing user-specific data, such as a GitHub token, within a project.
+ */
 @Service(Service.Level.PROJECT)
 @State(name = "UserData", storages = [Storage("UserData.xml")])
 class UserDataService : PersistentStateComponent<UserDataState> {

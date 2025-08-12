@@ -3,6 +3,7 @@ package com.github.arksap2002.githubrepositoryexplorer.ui
 import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
 import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
 import com.github.arksap2002.githubrepositoryexplorer.utils.GitHubApiUtils
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
@@ -22,10 +23,12 @@ class LoginDialog(private val project: Project) : DialogWrapper(project) {
         init()
 
         title = GithubRepositoryExplorer.message("loginDialog.title")
+        thisLogger().info("Login dialog initialized")
 
         val existingToken = UserDataService.service(project).token
         if (existingToken.isNotEmpty()) {
             tokenField.text = existingToken
+            thisLogger().info("Existing token loaded")
         }
     }
 
@@ -52,19 +55,20 @@ class LoginDialog(private val project: Project) : DialogWrapper(project) {
         return null
     }
 
-    /**
-     * Validates the GitHub token by making a request to the GitHub API.
-     *
-     * @param token The GitHub token to validate
-     * @return true if the token is valid, false otherwise
-     */
     private fun isTokenValid(token: String): Boolean {
-        return GitHubApiUtils.isTokenValid(token)
+        val isValid = GitHubApiUtils.isTokenValid(token)
+        if (isValid) {
+            thisLogger().info("Token validation successful")
+        } else {
+            thisLogger().warn("Token validation failed")
+        }
+        return isValid
     }
 
     override fun doOKAction() {
         val token = tokenField.text.trim()
         project.getService(UserDataService::class.java).state.token = token
+        thisLogger().info("GitHub token saved successfully")
         close(OK_EXIT_CODE)
     }
 }
