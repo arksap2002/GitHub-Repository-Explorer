@@ -1,5 +1,6 @@
 package com.github.arksap2002.githubrepositoryexplorer.utils
 
+import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
 import com.intellij.openapi.diagnostic.thisLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -42,18 +43,24 @@ object GitHubApiUtils {
                 when (e.response.status.value) {
                     404 -> {
                         thisLogger().warn("Repository not found: $url")
-                        throw Exception("Repository not found")
+                        throw Exception(GithubRepositoryExplorer.message("githubApi.error.repoNotFound"))
                     }
 
                     else -> {
                         thisLogger().error("GitHub API error: ${e.response.status.value} - ${e.message}")
-                        throw Exception("GitHub API error: ${e.response.status.value} - ${e.message}")
+                        throw Exception(
+                            GithubRepositoryExplorer.message(
+                                "githubApi.error.apiError",
+                                e.response.status.value,
+                                e.message
+                            )
+                        )
                     }
                 }
             } catch (e: Exception) {
                 // Handle general exceptions
                 thisLogger().error("Failed to fetch repository structure", e)
-                throw Exception("Failed to fetch repository structure: ${e.message}")
+                throw Exception(GithubRepositoryExplorer.message("githubApi.error.fetchRepoFailed", e.message ?: ""))
             } finally {
                 client.close()
             }
@@ -85,7 +92,8 @@ object GitHubApiUtils {
             val node = FileTreeNode(
                 name = content.name,
                 path = content.path,
-                type = content.type
+                type = content.type,
+                download_url = content.download_url
             )
 
             // Recursively fetch contents of directories
@@ -134,6 +142,58 @@ object GitHubApiUtils {
             }
         }
     }
+
+    /**
+     * Fetches file content from GitHub API using the provided download URL.
+     *
+     * @param token The GitHub personal access token to authenticate the request.
+     * @param downloadUrl The URL to download the raw file content.
+     * @return The content of the file as a string.
+     * @throws Exception if the file is not found (HTTP 404) or other errors occur during the request.
+     */
+    fun fetchFileContent(token: String, downloadUrl: String): String {
+        thisLogger().info("Fetching file content from GitHub API: $downloadUrl")
+        return runBlocking {
+            val client = HttpClient(CIO)
+
+            try {
+                // Make the API request with authentication
+                val response: HttpResponse = client.get(downloadUrl) {
+                    header("Authorization", "Bearer $token")
+                    header("Accept", "application/vnd.github.v3.raw")
+                }
+
+                val content = response.bodyAsText()
+                thisLogger().info("Successfully fetched file content")
+                content
+            } catch (e: ClientRequestException) {
+                // Handle specific HTTP error responses
+                when (e.response.status.value) {
+                    404 -> {
+                        thisLogger().warn("File not found: $downloadUrl")
+                        throw Exception(GithubRepositoryExplorer.message("githubApi.error.fileNotFound"))
+                    }
+
+                    else -> {
+                        thisLogger().error("GitHub API error: ${e.response.status.value} - ${e.message}")
+                        throw Exception(
+                            GithubRepositoryExplorer.message(
+                                "githubApi.error.apiError",
+                                e.response.status.value,
+                                e.message
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle general exceptions
+                thisLogger().error("Failed to fetch file content", e)
+                throw Exception(GithubRepositoryExplorer.message("githubApi.error.fetchFileFailed", e.message ?: ""))
+            } finally {
+                client.close()
+            }
+        }
+    }
 }
 
 @Serializable
@@ -154,5 +214,10 @@ data class FileTreeNode(
     val name: String,
     val path: String,
     val type: String,
+    val download_url: String? = null,
     val children: MutableList<FileTreeNode> = mutableListOf()
-)
+) {
+    override fun toString(): String {
+        return name
+    }
+}
