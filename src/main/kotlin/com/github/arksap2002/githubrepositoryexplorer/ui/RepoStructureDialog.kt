@@ -1,53 +1,75 @@
 package com.github.arksap2002.githubrepositoryexplorer.ui
 
 import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
+import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
 import com.github.arksap2002.githubrepositoryexplorer.utils.FileTreeNode
+import com.github.arksap2002.githubrepositoryexplorer.utils.GitHubApiUtils
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileTypes.PlainTextFileType
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
+import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import kotlinx.serialization.json.Json
-import java.awt.Dimension
+import java.awt.BorderLayout
 import javax.swing.JComponent
+import javax.swing.JDialog
+import javax.swing.JPanel
+import javax.swing.event.TreeSelectionEvent
+import javax.swing.event.TreeSelectionListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
 /**
- * Dialog for displaying the GitHub repository structure as a tree.
+ * Window for displaying the GitHub repository structure as a tree.
+ * When a file is selected, it is opened in the editor as read-only.
  */
 class RepoStructureDialog(
-    project: Project,
+    private val project: Project,
     private val repoStructureJson: String,
     private val repoName: String
-) : DialogWrapper(project) {
+) : JDialog() {
+    private val token = UserDataService.service().token
 
     init {
-        init()
         title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoName)
+        defaultCloseOperation = DISPOSE_ON_CLOSE
+
+        contentPane = createContentPanel()
+
+        // Set the size and position
+        val width = GithubRepositoryExplorer.message("ui.repoStructureDialog.width").toInt()
+        val height = GithubRepositoryExplorer.message("ui.repoStructureDialog.height").toInt()
+        setSize(width, height)
+        setLocationRelativeTo(null)
+
         thisLogger().info("Repository structure dialog initialized for $repoName")
     }
 
-    override fun createCenterPanel(): JComponent {
-        // Parse the JSON string into a list of FileTreeNode objects
+    private fun createContentPanel(): JComponent {
         val json = Json { ignoreUnknownKeys = true }
         val fileTreeNodes = json.decodeFromString<List<FileTreeNode>>(repoStructureJson)
 
         // Build the tree structure by recursively adding nodes
-        val rootNode = DefaultMutableTreeNode("$repoName Repository")
+        val rootNode =
+            DefaultMutableTreeNode(GithubRepositoryExplorer.message("repoStructureDialog.rootNode", repoName))
         buildTreeNodes(rootNode, fileTreeNodes)
 
         // Create the tree with the root node and make it visible
         val tree = Tree(DefaultTreeModel(rootNode))
         tree.isRootVisible = true
+        addTreeSelectionListener(tree)
 
-        // Create a scroll pane for the tree
+        // Create a panel to hold the scroll pane
+        val panel = JPanel(BorderLayout())
         val scrollPane = JBScrollPane(tree)
-        val width = GithubRepositoryExplorer.message("ui.repoStructureDialog.width").toInt()
-        val height = GithubRepositoryExplorer.message("ui.repoStructureDialog.height").toInt()
-        scrollPane.preferredSize = Dimension(width, height)
+        panel.add(scrollPane, BorderLayout.CENTER)
 
-        return scrollPane
+        return panel
     }
 
     private fun buildTreeNodes(parentNode: DefaultMutableTreeNode, fileTreeNodes: List<FileTreeNode>) {
@@ -55,7 +77,7 @@ class RepoStructureDialog(
             compareBy<FileTreeNode> { it.type != "dir" }.thenBy { it.name.lowercase() }
         )
         for (node in sortedNodes) {
-            val treeNode = DefaultMutableTreeNode(node.name)
+            val treeNode = DefaultMutableTreeNode(node)
             parentNode.add(treeNode)
 
             // If this is a directory with children, add its children recursively
@@ -63,5 +85,82 @@ class RepoStructureDialog(
                 buildTreeNodes(treeNode, node.children)
             }
         }
+    }
+
+    private fun openFileInEditor(fileName: String, content: String) {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+
+        val virtualFile = LightVirtualFile(fileName, PlainTextFileType.INSTANCE, content)
+        virtualFile.isWritable = false
+        fileEditorManager.openFile(virtualFile, true)
+
+        thisLogger().info("Opened file in editor: $fileName")
+    }
+
+    private fun addTreeSelectionListener(tree: Tree) {
+        tree.addTreeSelectionListener(object : TreeSelectionListener {
+            override fun valueChanged(e: TreeSelectionEvent) {
+                val node = tree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
+                val userObject = node.userObject
+
+                if (userObject is FileTreeNode) {
+                    // If it's a file, fetch content and open in editor
+                    if (userObject.type == "file") {
+                        val downloadUrl = userObject.download_url
+                        if (downloadUrl != null) {
+                            fetchFileContentWithProgress(downloadUrl, userObject.name)
+                        } else {
+                            Messages.showErrorDialog(
+                                project,
+                                GithubRepositoryExplorer.message("repoStructureDialog.error.noDownloadUrl"),
+                                GithubRepositoryExplorer.message("repoStructureDialog.error.title")
+                            )
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    private fun fetchFileContentWithProgress(downloadUrl: String, fileName: String) {
+        object : Task.Backgroundable(
+            project,
+            GithubRepositoryExplorer.message("repoStructureDialog.progress.title"),
+            false
+        ) {
+            private var content: String? = null
+            private var errorMessage: String? = null
+
+            override fun run(indicator: ProgressIndicator) {
+                indicator.isIndeterminate = true
+                indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.progress.text")
+                thisLogger().info("Fetching file content from: $downloadUrl")
+
+                try {
+                    content = GitHubApiUtils.fetchFileContent(token, downloadUrl)
+                    thisLogger().info("File content fetched successfully")
+                } catch (e: Exception) {
+                    errorMessage = e.message
+                    thisLogger().warn("Failed to fetch file content: ${e.message}")
+                }
+            }
+
+            override fun onSuccess() {
+                if (content != null) {
+                    // Open the file in the editor
+                    openFileInEditor(fileName, content!!)
+                } else {
+                    // Show error message
+                    Messages.showErrorDialog(
+                        project,
+                        GithubRepositoryExplorer.message(
+                            "repoStructureDialog.error.fetchFailed",
+                            errorMessage ?: "Unknown error"
+                        ),
+                        GithubRepositoryExplorer.message("repoStructureDialog.error.title")
+                    )
+                }
+            }
+        }.queue()
     }
 }
