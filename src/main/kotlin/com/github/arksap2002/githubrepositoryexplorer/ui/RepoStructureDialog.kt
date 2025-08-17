@@ -14,15 +14,17 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
-import kotlinx.serialization.json.Json
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JDialog
 import javax.swing.JPanel
+import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeSelectionEvent
 import javax.swing.event.TreeSelectionListener
+import javax.swing.event.TreeWillExpandListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
+import kotlinx.serialization.json.Json
 
 /**
  * Window for displaying the GitHub repository structure as a tree.
@@ -34,6 +36,9 @@ class RepoStructureDialog(
     private val repoName: String
 ) : JDialog() {
     private val token = UserDataService.service().token
+    private val baseContentsUrl = "https://api.github.com/repos/${repoName}/contents/"
+
+    private val emptyNode = DefaultMutableTreeNode("...")
 
     init {
         title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoName)
@@ -54,7 +59,7 @@ class RepoStructureDialog(
         val json = Json { ignoreUnknownKeys = true }
         val fileTreeNodes = json.decodeFromString<List<FileTreeNode>>(repoStructureJson)
 
-        // Build the tree structure by recursively adding nodes
+        // Build the tree structure by adding only the root level nodes (shallow)
         val rootNode =
             DefaultMutableTreeNode(GithubRepositoryExplorer.message("repoStructureDialog.rootNode", repoName))
         buildTreeNodes(rootNode, fileTreeNodes)
@@ -63,6 +68,7 @@ class RepoStructureDialog(
         val tree = Tree(DefaultTreeModel(rootNode))
         tree.isRootVisible = true
         addTreeSelectionListener(tree)
+        addTreeWillExpandLazyLoader(tree)
 
         // Create a panel to hold the scroll pane
         val panel = JPanel(BorderLayout())
@@ -73,18 +79,85 @@ class RepoStructureDialog(
     }
 
     private fun buildTreeNodes(parentNode: DefaultMutableTreeNode, fileTreeNodes: List<FileTreeNode>) {
+        if (parentNode.userObject is FileTreeNode) {
+            (parentNode.userObject as FileTreeNode).isProcessed = true
+        }
+        parentNode.removeAllChildren()
+
         val sortedNodes = fileTreeNodes.sortedWith(
             compareBy<FileTreeNode> { it.type != "dir" }.thenBy { it.name.lowercase() }
         )
+
         for (node in sortedNodes) {
             val treeNode = DefaultMutableTreeNode(node)
             parentNode.add(treeNode)
 
-            // If this is a directory with children, add its children recursively
-            if (node.type == "dir" && node.children.isNotEmpty()) {
-                buildTreeNodes(treeNode, node.children)
+            if (node.type == "dir") {
+                treeNode.add(DefaultMutableTreeNode("..."))
             }
         }
+    }
+
+    private fun addTreeWillExpandLazyLoader(tree: Tree) {
+        tree.addTreeWillExpandListener(object : TreeWillExpandListener {
+            override fun treeWillExpand(event: TreeExpansionEvent) {
+                val component = event.path.lastPathComponent as? DefaultMutableTreeNode ?: return
+                val userObject = component.userObject
+                if (userObject is FileTreeNode && userObject.type == "dir") {
+                    val dirPath = userObject.path
+                    if (!userObject.isProcessed) {
+                        val model = tree.model as DefaultTreeModel
+                        fetchDirectoryChildrenWithProgress(model, component, dirPath)
+                    }
+                }
+            }
+
+            override fun treeWillCollapse(event: TreeExpansionEvent) {}
+        })
+    }
+
+    private fun fetchDirectoryChildrenWithProgress(
+        model: DefaultTreeModel,
+        dirNode: DefaultMutableTreeNode,
+        dirPath: String
+    ) {
+        object : Task.Backgroundable(
+            project,
+            GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.title"),
+            false
+        ) {
+            private var children: List<FileTreeNode>? = null
+            private var errorMessage: String? = null
+
+            override fun run(indicator: ProgressIndicator) {
+                indicator.isIndeterminate = true
+                indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.text")
+                thisLogger().info("Fetching directory children from: $baseContentsUrl$dirPath")
+                try {
+                    children = GitHubApiUtils.listDirectory(token, baseContentsUrl, dirPath)
+                    thisLogger().info("Directory children fetched successfully: $dirPath")
+                } catch (e: Exception) {
+                    errorMessage = e.message
+                    thisLogger().warn("Failed to fetch directory children: ${e.message}")
+                }
+            }
+
+            override fun onSuccess() {
+                if (children != null) {
+                    buildTreeNodes(dirNode, children!!)
+                    model.nodeStructureChanged(dirNode)
+                } else {
+                    Messages.showErrorDialog(
+                        project,
+                        GithubRepositoryExplorer.message(
+                            "repoStructureDialog.error.dirFetchFailed",
+                            errorMessage ?: "Unknown error"
+                        ),
+                        GithubRepositoryExplorer.message("repoStructureDialog.error.title")
+                    )
+                }
+            }
+        }.queue()
     }
 
     private fun openFileInEditor(fileName: String, content: String) {
