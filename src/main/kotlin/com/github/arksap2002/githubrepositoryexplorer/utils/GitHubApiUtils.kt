@@ -9,6 +9,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.call.body
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -147,6 +148,32 @@ object GitHubApiUtils {
             val content = response.bodyAsText()
             thisLogger().info("Successfully fetched file content")
             content
+        }
+    }
+
+    /**
+     * Fetches binary file content (e.g., images) from GitHub API using the provided download URL.
+     *
+     * @param token The GitHub personal access token to authenticate the request.
+     * @param downloadUrl The URL to download the raw file content.
+     * @return The content of the file as a byte array.
+     * @throws Exception if the file is not found (HTTP 404) or other errors occur during the request.
+     */
+    fun fetchFileBytes(token: String, downloadUrl: String): ByteArray {
+        thisLogger().info("Fetching binary file content from GitHub API: $downloadUrl")
+        return executeWithHttpClient(
+            operationFailLogMessage = "Failed to fetch binary file content",
+            notFoundLogMessage = "File not found: $downloadUrl",
+            notFoundMessageKey = "githubApi.error.fileNotFound",
+            generalFailMessageKey = "githubApi.error.fetchFileFailed",
+        ) { client ->
+            val response: HttpResponse = client.get(downloadUrl) {
+                header("Authorization", "Bearer $token")
+                header("Accept", "application/vnd.github.v3.raw")
+            }
+            val bytes: ByteArray = response.body()
+            thisLogger().info("Successfully fetched binary file content")
+            bytes
         }
     }
 
