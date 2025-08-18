@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.testFramework.LightVirtualFile
+import com.intellij.testFramework.BinaryLightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import java.awt.BorderLayout
@@ -155,14 +156,29 @@ class RepoStructureDialog(
         }.queue()
     }
 
-    private fun openFileInEditor(fileName: String, content: String) {
+    private fun openTextFileInEditor(fileName: String, content: String) {
         val fileEditorManager = FileEditorManager.getInstance(project)
 
         val virtualFile = LightVirtualFile(fileName, PlainTextFileType.INSTANCE, content)
         virtualFile.isWritable = false
         fileEditorManager.openFile(virtualFile, true)
 
-        thisLogger().info("Opened file in editor: $fileName")
+        thisLogger().info("Opened text file in editor: $fileName")
+    }
+
+    private fun openImageInEditor(fileName: String, bytes: ByteArray) {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+
+        val virtualFile = BinaryLightVirtualFile(fileName, bytes)
+        virtualFile.isWritable = false
+        fileEditorManager.openFile(virtualFile, true)
+
+        thisLogger().info("Opened image file in editor: $fileName")
+    }
+
+    private fun isImageFile(fileName: String): Boolean {
+        val lower = fileName.lowercase()
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
     }
 
     private fun addTreeSelectionListener(tree: Tree) {
@@ -196,7 +212,8 @@ class RepoStructureDialog(
             GithubRepositoryExplorer.message("repoStructureDialog.progress.title"),
             false
         ) {
-            private var content: String? = null
+            private var textContent: String? = null
+            private var imageBytes: ByteArray? = null
             private var errorMessage: String? = null
 
             override fun run(indicator: ProgressIndicator) {
@@ -205,8 +222,13 @@ class RepoStructureDialog(
                 thisLogger().info("Fetching file content from: $downloadUrl")
 
                 try {
-                    content = GitHubApiUtils.fetchFileContent(token, downloadUrl)
-                    thisLogger().info("File content fetched successfully")
+                    if (isImageFile(fileName)) {
+                        imageBytes = GitHubApiUtils.fetchFileBytes(token, downloadUrl)
+                        thisLogger().info("Binary (image) file content fetched successfully")
+                    } else {
+                        textContent = GitHubApiUtils.fetchFileContent(token, downloadUrl)
+                        thisLogger().info("Text file content fetched successfully")
+                    }
                 } catch (e: Exception) {
                     errorMessage = e.message
                     thisLogger().warn("Failed to fetch file content: ${e.message}")
@@ -214,19 +236,19 @@ class RepoStructureDialog(
             }
 
             override fun onSuccess() {
-                if (content != null) {
-                    // Open the file in the editor
-                    openFileInEditor(fileName, content!!)
-                } else {
-                    // Show error message
-                    Messages.showErrorDialog(
-                        project,
-                        GithubRepositoryExplorer.message(
-                            "repoStructureDialog.error.fetchFailed",
-                            errorMessage ?: "Unknown error"
-                        ),
-                        GithubRepositoryExplorer.message("repoStructureDialog.error.title")
-                    )
+                when {
+                    imageBytes != null -> openImageInEditor(fileName, imageBytes!!)
+                    textContent != null -> openTextFileInEditor(fileName, textContent!!)
+                    else -> {
+                        Messages.showErrorDialog(
+                            project,
+                            GithubRepositoryExplorer.message(
+                                "repoStructureDialog.error.fetchFailed",
+                                errorMessage ?: "Unknown error"
+                            ),
+                            GithubRepositoryExplorer.message("repoStructureDialog.error.title")
+                        )
+                    }
                 }
             }
         }.queue()
