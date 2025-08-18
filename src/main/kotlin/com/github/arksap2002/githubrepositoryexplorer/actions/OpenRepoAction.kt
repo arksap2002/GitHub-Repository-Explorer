@@ -36,11 +36,10 @@ class OpenRepoAction : AnAction() {
 
             if (rootNodes != null) {
                 // Create and show the repository structure dialog
-                val repoFullName = "$repoOwner/$repoName"
-                val structureDialog = RepoStructureDialog(project, rootNodes, repoFullName)
+                val structureDialog = RepoStructureDialog(project, rootNodes, repoOwner, repoName)
                 structureDialog.show()
 
-                thisLogger().info("Repository structure dialog shown for: $repoFullName")
+                thisLogger().info("Repository structure dialog shown for: $repoOwner/$repoName")
             } else {
                 thisLogger().warn("Repository structure JSON is null for: $repoOwner/$repoName")
             }
