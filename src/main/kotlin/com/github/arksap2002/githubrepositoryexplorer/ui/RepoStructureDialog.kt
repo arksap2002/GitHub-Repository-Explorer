@@ -24,7 +24,6 @@ import javax.swing.event.TreeSelectionListener
 import javax.swing.event.TreeWillExpandListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
-import kotlinx.serialization.json.Json
 
 /**
  * Window for displaying the GitHub repository structure as a tree.
@@ -32,13 +31,11 @@ import kotlinx.serialization.json.Json
  */
 class RepoStructureDialog(
     private val project: Project,
-    private val repoStructureJson: String,
+    private val rootNodes: List<FileTreeNode>,
     private val repoName: String
 ) : JDialog() {
     private val token = UserDataService.service().token
     private val baseContentsUrl = "https://api.github.com/repos/${repoName}/contents/"
-
-    private val emptyNode = DefaultMutableTreeNode("...")
 
     init {
         title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoName)
@@ -56,13 +53,10 @@ class RepoStructureDialog(
     }
 
     private fun createContentPanel(): JComponent {
-        val json = Json { ignoreUnknownKeys = true }
-        val fileTreeNodes = json.decodeFromString<List<FileTreeNode>>(repoStructureJson)
-
-        // Build the tree structure by adding only the root level nodes (shallow)
+        // Build the tree structure by adding only the root level nodes
         val rootNode =
             DefaultMutableTreeNode(GithubRepositoryExplorer.message("repoStructureDialog.rootNode", repoName))
-        buildTreeNodes(rootNode, fileTreeNodes)
+        buildTreeNodes(rootNode, rootNodes)
 
         // Create the tree with the root node and make it visible
         val tree = Tree(DefaultTreeModel(rootNode))
