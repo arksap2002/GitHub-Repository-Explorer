@@ -153,11 +153,13 @@ object GitHubApiUtils {
     /**
      * Lists immediate children for a given directory path (non-recursive).
      * @param token GitHub token
-     * @param baseUrl Base contents URL, e.g., https://api.github.com/repos/{owner}/{repo}/contents/
+     * @param owner Repository owner
+     * @param repo Repository name
      * @param path Directory path relative to repo root ("" or "dir/subdir")
      */
-    fun listDirectory(token: String, baseUrl: String, path: String): List<FileTreeNode> {
-        thisLogger().info("Listing directory (non-recursive): base=$baseUrl path=$path")
+    fun listDirectory(token: String, owner: String, repo: String, path: String): List<FileTreeNode> {
+        val baseUrl = "https://api.github.com/repos/${owner}/${repo}/contents/"
+        thisLogger().info("Listing directory (non-recursive): repo=$owner/$repo path=$path")
         return executeWithHttpClient(
             operationFailLogMessage = "Failed to list directory",
             notFoundLogMessage = "Directory not found: ${baseUrl}${path}",

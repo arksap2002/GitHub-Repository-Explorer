@@ -32,13 +32,14 @@ import javax.swing.tree.DefaultTreeModel
 class RepoStructureDialog(
     private val project: Project,
     private val rootNodes: List<FileTreeNode>,
-    private val repoName: String
+    private val owner: String,
+    private val name: String,
 ) : JDialog() {
     private val token = UserDataService.service().token
-    private val baseContentsUrl = "https://api.github.com/repos/${repoName}/contents/"
+    private val repoFullName = "$owner/$name"
 
     init {
-        title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoName)
+        title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoFullName)
         defaultCloseOperation = DISPOSE_ON_CLOSE
 
         contentPane = createContentPanel()
@@ -49,13 +50,13 @@ class RepoStructureDialog(
         setSize(width, height)
         setLocationRelativeTo(null)
 
-        thisLogger().info("Repository structure dialog initialized for $repoName")
+        thisLogger().info("Repository structure dialog initialized for $repoFullName")
     }
 
     private fun createContentPanel(): JComponent {
         // Build the tree structure by adding only the root level nodes
         val rootNode =
-            DefaultMutableTreeNode(GithubRepositoryExplorer.message("repoStructureDialog.rootNode", repoName))
+            DefaultMutableTreeNode(GithubRepositoryExplorer.message("repoStructureDialog.rootNode", repoFullName))
         buildTreeNodes(rootNode, rootNodes)
 
         // Create the tree with the root node and make it visible
@@ -126,9 +127,9 @@ class RepoStructureDialog(
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.text")
-                thisLogger().info("Fetching directory children from: $baseContentsUrl$dirPath")
+                thisLogger().info("Fetching directory children for $repoFullName at path: $dirPath")
                 try {
-                    children = GitHubApiUtils.listDirectory(token, baseContentsUrl, dirPath)
+                    children = GitHubApiUtils.listDirectory(token, owner, name, dirPath)
                     thisLogger().info("Directory children fetched successfully: $dirPath")
                 } catch (e: Exception) {
                     errorMessage = e.message

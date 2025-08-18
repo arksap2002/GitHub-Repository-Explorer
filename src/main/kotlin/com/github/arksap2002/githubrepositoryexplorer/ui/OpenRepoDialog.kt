@@ -77,7 +77,6 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
         val owner = ownerField.text.trim()
         val name = nameField.text.trim()
         val token = UserDataService.service().token
-        val url = "https://api.github.com/repos/$owner/$name/contents/"
 
         // Create a background task for repository validation
         object : Task.Backgroundable(
@@ -96,7 +95,7 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
 
                 try {
                     // Make API request to validate the repository: list root directory and encode to JSON
-                    rootNodes = GitHubApiUtils.listDirectory(token, url, "")
+                    rootNodes = GitHubApiUtils.listDirectory(token, owner, name, "")
                     isValid = true
                     thisLogger().info("Repository validation successful: $owner/$name")
                 } catch (e: Exception) {
