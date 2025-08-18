@@ -1,5 +1,6 @@
 package com.github.arksap2002.githubrepositoryexplorer.utils
 
+import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
 import com.intellij.openapi.diagnostic.thisLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -10,50 +11,44 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
  * Utility class for GitHub API interactions.
  */
 object GitHubApiUtils {
-    /**
-     * Makes a GET request to the given URL using the provided token and returns the fetched repository structure
-     * as a JSON string.
-     *
-     * @param token The GitHub personal access token to authenticate the request.
-     * @param url The URL for the GitHub API endpoint to fetch the repository contents.
-     * @return A JSON string representing the directory structure of the repository.
-     * @throws Exception if the repository is not found (HTTP 404) or other errors occur during the request.
-     */
-    fun makeGetRequest(token: String, url: String): String {
-        thisLogger().info("Making GET request to GitHub API: $url")
+    private fun <T> executeWithHttpClient(
+        operationFailLogMessage: String,
+        notFoundLogMessage: String,
+        notFoundMessageKey: String,
+        generalFailMessageKey: String,
+        action: suspend (client: HttpClient) -> T,
+    ): T {
         return runBlocking {
             val client = HttpClient(CIO)
-
             try {
-                // Fetch repository structure and convert to JSON
-                val fileTree = fetchDirectoryContents(client, url, "", token)
-                val result = Json.encodeToString(fileTree)
-                thisLogger().info("Successfully fetched repository structure")
-                result
+                action(client)
             } catch (e: ClientRequestException) {
-                // Handle specific HTTP error responses
                 when (e.response.status.value) {
                     404 -> {
-                        thisLogger().warn("Repository not found: $url")
-                        throw Exception("Repository not found")
+                        thisLogger().warn(notFoundLogMessage)
+                        throw Exception(GithubRepositoryExplorer.message(notFoundMessageKey))
                     }
 
                     else -> {
                         thisLogger().error("GitHub API error: ${e.response.status.value} - ${e.message}")
-                        throw Exception("GitHub API error: ${e.response.status.value} - ${e.message}")
+                        throw Exception(
+                            GithubRepositoryExplorer.message(
+                                "githubApi.error.apiError",
+                                e.response.status.value,
+                                e.message
+                            )
+                        )
                     }
                 }
             } catch (e: Exception) {
-                // Handle general exceptions
-                thisLogger().error("Failed to fetch repository structure", e)
-                throw Exception("Failed to fetch repository structure: ${e.message}")
+                thisLogger().error(operationFailLogMessage, e)
+                throw Exception(GithubRepositoryExplorer.message(generalFailMessageKey, e.message ?: ""))
             } finally {
                 client.close()
             }
@@ -85,14 +80,9 @@ object GitHubApiUtils {
             val node = FileTreeNode(
                 name = content.name,
                 path = content.path,
-                type = content.type
+                type = content.type,
+                download_url = content.download_url
             )
-
-            // Recursively fetch contents of directories
-            if (content.type == "dir") {
-                node.children.addAll(fetchDirectoryContents(client, baseUrl, content.path, token))
-            }
-
             result.add(node)
         }
 
@@ -109,7 +99,6 @@ object GitHubApiUtils {
         thisLogger().info("Validating GitHub token")
         return runBlocking {
             try {
-                // Initialize the HTTP client and set up an API request
                 val url = "https://api.github.com/user"
                 val client = HttpClient(CIO)
                 val response: HttpResponse = client.get(url) {
@@ -134,6 +123,50 @@ object GitHubApiUtils {
             }
         }
     }
+
+    /**
+     * Fetches file content from GitHub API using the provided download URL.
+     *
+     * @param token The GitHub personal access token to authenticate the request.
+     * @param downloadUrl The URL to download the raw file content.
+     * @return The content of the file as a string.
+     * @throws Exception if the file is not found (HTTP 404) or other errors occur during the request.
+     */
+    fun fetchFileContent(token: String, downloadUrl: String): String {
+        thisLogger().info("Fetching file content from GitHub API: $downloadUrl")
+        return executeWithHttpClient(
+            operationFailLogMessage = "Failed to fetch file content",
+            notFoundLogMessage = "File not found: $downloadUrl",
+            notFoundMessageKey = "githubApi.error.fileNotFound",
+            generalFailMessageKey = "githubApi.error.fetchFileFailed",
+        ) { client ->
+            val response: HttpResponse = client.get(downloadUrl) {
+                header("Authorization", "Bearer $token")
+                header("Accept", "application/vnd.github.v3.raw")
+            }
+            val content = response.bodyAsText()
+            thisLogger().info("Successfully fetched file content")
+            content
+        }
+    }
+
+    /**
+     * Lists immediate children for a given directory path (non-recursive).
+     * @param token GitHub token
+     * @param baseUrl Base contents URL, e.g., https://api.github.com/repos/{owner}/{repo}/contents/
+     * @param path Directory path relative to repo root ("" or "dir/subdir")
+     */
+    fun listDirectory(token: String, baseUrl: String, path: String): List<FileTreeNode> {
+        thisLogger().info("Listing directory (non-recursive): base=$baseUrl path=$path")
+        return executeWithHttpClient(
+            operationFailLogMessage = "Failed to list directory",
+            notFoundLogMessage = "Directory not found: ${baseUrl}${path}",
+            notFoundMessageKey = "githubApi.error.repoNotFound",
+            generalFailMessageKey = "githubApi.error.fetchRepoFailed",
+        ) { client ->
+            fetchDirectoryContents(client, baseUrl, path, token)
+        }
+    }
 }
 
 @Serializable
@@ -154,5 +187,10 @@ data class FileTreeNode(
     val name: String,
     val path: String,
     val type: String,
-    val children: MutableList<FileTreeNode> = mutableListOf()
-)
+    var isProcessed: Boolean = false,
+    val download_url: String? = null,
+) {
+    override fun toString(): String {
+        return name
+    }
+}

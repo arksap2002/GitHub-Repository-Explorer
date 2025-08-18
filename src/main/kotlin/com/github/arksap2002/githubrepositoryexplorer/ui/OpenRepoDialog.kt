@@ -2,6 +2,7 @@ package com.github.arksap2002.githubrepositoryexplorer.ui
 
 import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
 import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
+import com.github.arksap2002.githubrepositoryexplorer.utils.FileTreeNode
 import com.github.arksap2002.githubrepositoryexplorer.utils.GitHubApiUtils
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.progress.ProgressIndicator
@@ -12,6 +13,8 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -21,7 +24,7 @@ import javax.swing.JPanel
 class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
     private val ownerField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private val nameField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
-    private var repoStructureJson: String? = null
+    private var rootNodes: List<FileTreeNode>? = null
 
     init {
         init()
@@ -49,12 +52,12 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
     }
 
     /**
-     * Returns the repository structure as a JSON string.
+     * Returns the repository structure.
      */
-    fun getRepoStructureJson(): String? {
-        return repoStructureJson
+    fun getRepoRootNodes(): List<FileTreeNode>? {
+        return rootNodes
     }
-    
+
     /**
      * Returns the repository owner.
      */
@@ -90,11 +93,10 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
                 indicator.isIndeterminate = true
                 indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
                 thisLogger().info("Validating repository: $owner/$name")
-                
+
                 try {
-                    // Make API request to validate repository
-                    val response = GitHubApiUtils.makeGetRequest(token, url)
-                    repoStructureJson = response
+                    // Make API request to validate the repository: list root directory and encode to JSON
+                    rootNodes = GitHubApiUtils.listDirectory(token, url, "")
                     isValid = true
                     thisLogger().info("Repository validation successful: $owner/$name")
                 } catch (e: Exception) {
