@@ -110,7 +110,7 @@ object GitHubApiUtils {
         token: String,
         downloadUrl: String,
         engine: HttpClientEngine = CIO.create()
-    ): String? {
+    ): Pair<Boolean, String> {
         thisLogger().info("Fetching file content from GitHub API: $downloadUrl")
         return try {
             executeWithHttpClient(
@@ -126,12 +126,17 @@ object GitHubApiUtils {
                     header("Accept", "application/vnd.github.v3.raw")
                 }
                 val content = response.bodyAsText()
-                thisLogger().info("Successfully fetched file content")
-                content
+                val success = isSuccessful(response)
+                if (success) {
+                    thisLogger().info("Successfully fetched file content")
+                } else {
+                    thisLogger().warn("Fetched file content with non-2xx status: HTTP ${'$'}{response.status.value}")
+                }
+                Pair(success, content)
             }
         } catch (e: Exception) {
             thisLogger().warn("fetchFileContent failed: ${e.message}")
-            null
+            Pair(false, "")
         }
     }
 
@@ -147,7 +152,7 @@ object GitHubApiUtils {
         token: String,
         downloadUrl: String,
         engine: HttpClientEngine = CIO.create()
-    ): ByteArray? {
+    ): Pair<Boolean, ByteArray> {
         thisLogger().info("Fetching binary file content from GitHub API: $downloadUrl")
         return try {
             executeWithHttpClient(
@@ -163,12 +168,17 @@ object GitHubApiUtils {
                     header("Accept", "application/vnd.github.v3.raw")
                 }
                 val bytes: ByteArray = response.body()
-                thisLogger().info("Successfully fetched binary file content")
-                bytes
+                val success = isSuccessful(response)
+                if (success) {
+                    thisLogger().info("Successfully fetched binary file content")
+                } else {
+                    thisLogger().warn("Fetched binary content with non-2xx status: HTTP ${'$'}{response.status.value}")
+                }
+                Pair(success, bytes)
             }
         } catch (e: Exception) {
             thisLogger().warn("fetchFileBytes failed: ${e.message}")
-            null
+            Pair(false, ByteArray(0))
         }
     }
 
@@ -186,7 +196,7 @@ object GitHubApiUtils {
         repo: String,
         path: String,
         engine: HttpClientEngine = CIO.create()
-    ): List<FileTreeNode>? {
+    ): Pair<Boolean, List<FileTreeNode>> {
         val baseUrl = "https://api.github.com/repos/${owner}/${repo}/contents/"
         thisLogger().info("Listing directory (non-recursive): repo=$owner/$repo path=$path")
         return try {
@@ -228,11 +238,11 @@ object GitHubApiUtils {
                     result.add(node)
                 }
 
-                result
+                Pair(true, result)
             }
         } catch (e: Exception) {
             thisLogger().warn("listDirectory failed: ${e.message}")
-            null
+            Pair(false, emptyList())
         }
     }
 

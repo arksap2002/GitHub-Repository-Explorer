@@ -11,8 +11,6 @@ import kotlin.coroutines.EmptyCoroutineContext
 import org.junit.Test
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 
@@ -46,8 +44,9 @@ class GitHubApiUtilsTest {
         val engine = MockEngine { _ ->
             respond(body, status = HttpStatusCode.OK, headers = headersOf(HttpHeaders.ContentType, "text/plain"))
         }
-        val result = GitHubApiUtils.fetchFileContent(scope, token = "t", downloadUrl = "http://example", engine = engine)
-        assertEquals(body, result)
+        val (ok, text) = GitHubApiUtils.fetchFileContent(scope, token = "t", downloadUrl = "http://example", engine = engine)
+        assertTrue(ok)
+        assertEquals(body, text)
     }
 
     @Test
@@ -56,8 +55,9 @@ class GitHubApiUtilsTest {
         val engine = MockEngine { _ ->
             respond(body, status = HttpStatusCode.BadRequest, headers = headersOf(HttpHeaders.ContentType, "text/plain"))
         }
-        val result = GitHubApiUtils.fetchFileContent(scope, token = "t", downloadUrl = "http://example", engine = engine)
-        assertEquals(body, result)
+        val (ok, text) = GitHubApiUtils.fetchFileContent(scope, token = "t", downloadUrl = "http://example", engine = engine)
+        assertFalse(ok)
+        assertEquals(body, text)
     }
 
     @Test
@@ -66,9 +66,9 @@ class GitHubApiUtilsTest {
         val engine = MockEngine { _ ->
             respond(bytes, status = HttpStatusCode.OK, headers = headersOf(HttpHeaders.ContentType, "application/octet-stream"))
         }
-        val result = GitHubApiUtils.fetchFileBytes(scope, token = "t", downloadUrl = "http://example", engine = engine)
-        assertNotNull(result)
-        assertArrayEquals(bytes, result!!)
+        val (ok, data) = GitHubApiUtils.fetchFileBytes(scope, token = "t", downloadUrl = "http://example", engine = engine)
+        assertTrue(ok)
+        assertArrayEquals(bytes, data)
     }
 
     @Test
@@ -77,9 +77,9 @@ class GitHubApiUtilsTest {
         val engine = MockEngine { _ ->
             respond(bytes, status = HttpStatusCode.BadRequest, headers = headersOf(HttpHeaders.ContentType, "application/octet-stream"))
         }
-        val result = GitHubApiUtils.fetchFileBytes(scope, token = "t", downloadUrl = "http://example", engine = engine)
-        assertNotNull(result)
-        assertArrayEquals(bytes, result!!)
+        val (ok, data) = GitHubApiUtils.fetchFileBytes(scope, token = "t", downloadUrl = "http://example", engine = engine)
+        assertFalse(ok)
+        assertArrayEquals(bytes, data)
     }
 
     @Test
@@ -113,9 +113,9 @@ class GitHubApiUtilsTest {
         val engine = MockEngine { _ ->
             respond(json, status = HttpStatusCode.OK, headers = jsonHeaders())
         }
-        val nodes = GitHubApiUtils.listDirectory(scope, token = "t", owner = "o", repo = "r", path = "", engine = engine)
-        assertNotNull(nodes)
-        assertEquals(2, nodes!!.size)
+        val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token = "t", owner = "o", repo = "r", path = "", engine = engine)
+        assertTrue(ok)
+        assertEquals(2, nodes.size)
         assertEquals("README.md", nodes[0].name)
         assertEquals("file", nodes[0].type)
         assertEquals("src", nodes[1].name)
@@ -123,12 +123,13 @@ class GitHubApiUtilsTest {
     }
 
     @Test
-    fun `listDirectory returns null on 404`() {
+    fun `listDirectory returns empty with false on 404`() {
         val engine = MockEngine { _ ->
             respond("{}", status = HttpStatusCode.NotFound, headers = jsonHeaders())
         }
-        val nodes = GitHubApiUtils.listDirectory(scope, token = "t", owner = "o", repo = "r", path = "", engine = engine)
-        assertNull(nodes)
+        val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token = "t", owner = "o", repo = "r", path = "", engine = engine)
+        assertFalse(ok)
+        assertEquals(0, nodes.size)
     }
 
     @Test
