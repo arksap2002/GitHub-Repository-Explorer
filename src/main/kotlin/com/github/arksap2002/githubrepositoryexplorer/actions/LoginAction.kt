@@ -9,6 +9,9 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Action that provides login functionality for GitHub Repository Explorer.
@@ -43,7 +46,8 @@ class LoginAction : AnAction() {
     }
 
     private fun showLoginDialog(project: Project) {
-        val dialog = LoginDialog(project)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val dialog = LoginDialog(project, scope)
 
         if (dialog.showAndGet()) {
             thisLogger().info("GitHub token saved successfully")

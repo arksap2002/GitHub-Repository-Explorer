@@ -10,6 +10,7 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.call.body
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -19,75 +20,40 @@ import kotlinx.serialization.json.Json
  */
 object GitHubApiUtils {
     private fun <T> executeWithHttpClient(
+        scope: CoroutineScope,
         operationFailLogMessage: String,
         notFoundLogMessage: String,
         notFoundMessageKey: String,
         generalFailMessageKey: String,
         action: suspend (client: HttpClient) -> T,
     ): T {
-        return runBlocking {
-            val client = HttpClient(CIO)
-            try {
-                action(client)
-            } catch (e: ClientRequestException) {
-                when (e.response.status.value) {
-                    404 -> {
-                        thisLogger().warn(notFoundLogMessage)
-                        throw Exception(GithubRepositoryExplorer.message(notFoundMessageKey))
-                    }
-
-                    else -> {
-                        thisLogger().error("GitHub API error: ${e.response.status.value} - ${e.message}")
-                        throw Exception(
-                            GithubRepositoryExplorer.message(
-                                "githubApi.error.apiError",
-                                e.response.status.value,
-                                e.message
-                            )
-                        )
-                    }
+        val client = HttpClient(CIO)
+        try {
+            return runBlocking(scope.coroutineContext) { action(client) }
+        } catch (e: ClientRequestException) {
+            when (e.response.status.value) {
+                404 -> {
+                    thisLogger().warn(notFoundLogMessage)
+                    throw Exception(GithubRepositoryExplorer.message(notFoundMessageKey))
                 }
-            } catch (e: Exception) {
-                thisLogger().error(operationFailLogMessage, e)
-                throw Exception(GithubRepositoryExplorer.message(generalFailMessageKey, e.message ?: ""))
-            } finally {
-                client.close()
+
+                else -> {
+                    thisLogger().error("GitHub API error: ${e.response.status.value} - ${e.message}")
+                    throw Exception(
+                        GithubRepositoryExplorer.message(
+                            "githubApi.error.apiError",
+                            e.response.status.value,
+                            e.message
+                        )
+                    )
+                }
             }
+        } catch (e: Exception) {
+            thisLogger().error(operationFailLogMessage, e)
+            throw Exception(GithubRepositoryExplorer.message(generalFailMessageKey, e.message ?: ""))
+        } finally {
+            client.close()
         }
-    }
-
-    private suspend fun fetchDirectoryContents(
-        client: HttpClient,
-        baseUrl: String,
-        path: String,
-        token: String
-    ): List<FileTreeNode> {
-        val url = if (path.isEmpty()) baseUrl else "$baseUrl$path"
-
-        // Make the API request with authentication
-        val response: HttpResponse = client.get(url) {
-            header("Authorization", "Bearer $token")
-            header("Accept", "application/json")
-        }
-
-        // Parse the JSON response
-        val responseText = response.bodyAsText()
-        val json = Json { ignoreUnknownKeys = true }
-        val contents = json.decodeFromString<List<GitHubContent>>(responseText)
-        val result = mutableListOf<FileTreeNode>()
-
-        // Build the file tree structure with recursive directory traversal
-        for (content in contents) {
-            val node = FileTreeNode(
-                name = content.name,
-                path = content.path,
-                type = content.type,
-                download_url = content.download_url
-            )
-            result.add(node)
-        }
-
-        return result
     }
 
     /**
@@ -96,32 +62,32 @@ object GitHubApiUtils {
      * @param token The GitHub token to validate
      * @return true if the token is valid, false otherwise
      */
-    fun isTokenValid(token: String): Boolean {
+    fun isTokenValid(scope: CoroutineScope, token: String): Boolean {
         thisLogger().info("Validating GitHub token")
-        return runBlocking {
-            try {
+        return try {
+            executeWithHttpClient(
+                scope = scope,
+                operationFailLogMessage = "Failed to validate token",
+                notFoundLogMessage = "User endpoint not found",
+                notFoundMessageKey = "githubApi.error.apiError",
+                generalFailMessageKey = "githubApi.error.apiError",
+            ) { client ->
                 val url = "https://api.github.com/user"
-                val client = HttpClient(CIO)
                 val response: HttpResponse = client.get(url) {
                     header("Authorization", "Bearer $token")
                     header("Accept", "application/json")
                 }
-
-                client.close()
-
-                // Check if response status indicates success
                 val isValid = response.status.value in 200..299
                 if (isValid) {
                     thisLogger().info("GitHub token validation successful")
                 } else {
                     thisLogger().warn("GitHub token validation failed: HTTP ${response.status.value}")
                 }
-
                 isValid
-            } catch (e: Exception) {
-                thisLogger().warn("GitHub token validation failed with exception", e)
-                false
             }
+        } catch (e: Exception) {
+            thisLogger().warn("GitHub token validation failed with exception", e)
+            false
         }
     }
 
@@ -133,9 +99,10 @@ object GitHubApiUtils {
      * @return The content of the file as a string.
      * @throws Exception if the file is not found (HTTP 404) or other errors occur during the request.
      */
-    fun fetchFileContent(token: String, downloadUrl: String): String {
+    fun fetchFileContent(scope: CoroutineScope, token: String, downloadUrl: String): String {
         thisLogger().info("Fetching file content from GitHub API: $downloadUrl")
         return executeWithHttpClient(
+            scope = scope,
             operationFailLogMessage = "Failed to fetch file content",
             notFoundLogMessage = "File not found: $downloadUrl",
             notFoundMessageKey = "githubApi.error.fileNotFound",
@@ -159,9 +126,10 @@ object GitHubApiUtils {
      * @return The content of the file as a byte array.
      * @throws Exception if the file is not found (HTTP 404) or other errors occur during the request.
      */
-    fun fetchFileBytes(token: String, downloadUrl: String): ByteArray {
+    fun fetchFileBytes(scope: CoroutineScope, token: String, downloadUrl: String): ByteArray {
         thisLogger().info("Fetching binary file content from GitHub API: $downloadUrl")
         return executeWithHttpClient(
+            scope = scope,
             operationFailLogMessage = "Failed to fetch binary file content",
             notFoundLogMessage = "File not found: $downloadUrl",
             notFoundMessageKey = "githubApi.error.fileNotFound",
@@ -184,16 +152,42 @@ object GitHubApiUtils {
      * @param repo Repository name
      * @param path Directory path relative to repo root ("" or "dir/subdir")
      */
-    fun listDirectory(token: String, owner: String, repo: String, path: String): List<FileTreeNode> {
+    fun listDirectory(scope: CoroutineScope, token: String, owner: String, repo: String, path: String): List<FileTreeNode> {
         val baseUrl = "https://api.github.com/repos/${owner}/${repo}/contents/"
         thisLogger().info("Listing directory (non-recursive): repo=$owner/$repo path=$path")
         return executeWithHttpClient(
+            scope = scope,
             operationFailLogMessage = "Failed to list directory",
             notFoundLogMessage = "Directory not found: ${baseUrl}${path}",
             notFoundMessageKey = "githubApi.error.repoNotFound",
             generalFailMessageKey = "githubApi.error.fetchRepoFailed",
         ) { client ->
-            fetchDirectoryContents(client, baseUrl, path, token)
+            val url = if (path.isEmpty()) baseUrl else "$baseUrl$path"
+
+            // Make the API request with authentication
+            val response: HttpResponse = client.get(url) {
+                header("Authorization", "Bearer $token")
+                header("Accept", "application/json")
+            }
+
+            // Parse the JSON response
+            val responseText = response.bodyAsText()
+            val json = Json { ignoreUnknownKeys = true }
+            val contents = json.decodeFromString<List<GitHubContent>>(responseText)
+            val result = mutableListOf<FileTreeNode>()
+
+            // Build the file tree structure with recursive directory traversal
+            for (content in contents) {
+                val node = FileTreeNode(
+                    name = content.name,
+                    path = content.path,
+                    type = content.type,
+                    download_url = content.download_url
+                )
+                result.add(node)
+            }
+
+            result
         }
     }
 }

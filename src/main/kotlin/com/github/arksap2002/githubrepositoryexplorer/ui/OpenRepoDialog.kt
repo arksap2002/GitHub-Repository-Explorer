@@ -13,15 +13,15 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
  * Dialog for entering GitHub repository information.
  */
-class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
+import kotlinx.coroutines.CoroutineScope
+
+class OpenRepoDialog(private val project: Project, private val scope: CoroutineScope) : DialogWrapper(project) {
     private val ownerField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private val nameField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private var rootNodes: List<FileTreeNode>? = null
@@ -94,8 +94,7 @@ class OpenRepoDialog(private val project: Project) : DialogWrapper(project) {
                 thisLogger().info("Validating repository: $owner/$name")
 
                 try {
-                    // Make API request to validate the repository: list root directory and encode to JSON
-                    rootNodes = GitHubApiUtils.listDirectory(token, owner, name, "")
+                    rootNodes = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
                     isValid = true
                     thisLogger().info("Repository validation successful: $owner/$name")
                 } catch (e: Exception) {

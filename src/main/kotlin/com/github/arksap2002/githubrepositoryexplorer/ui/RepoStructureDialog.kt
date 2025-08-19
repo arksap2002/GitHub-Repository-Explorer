@@ -25,6 +25,7 @@ import javax.swing.event.TreeSelectionListener
 import javax.swing.event.TreeWillExpandListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Window for displaying the GitHub repository structure as a tree.
@@ -35,6 +36,7 @@ class RepoStructureDialog(
     private val rootNodes: List<FileTreeNode>,
     private val owner: String,
     private val name: String,
+    private val scope: CoroutineScope,
 ) : JDialog() {
     private val token = UserDataService.service().token
     private val repoFullName = "$owner/$name"
@@ -130,7 +132,7 @@ class RepoStructureDialog(
                 indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.text")
                 thisLogger().info("Fetching directory children for $repoFullName at path: $dirPath")
                 try {
-                    children = GitHubApiUtils.listDirectory(token, owner, name, dirPath)
+                    children = GitHubApiUtils.listDirectory(scope, token, owner, name, dirPath)
                     thisLogger().info("Directory children fetched successfully: $dirPath")
                 } catch (e: Exception) {
                     errorMessage = e.message
@@ -223,10 +225,10 @@ class RepoStructureDialog(
 
                 try {
                     if (isImageFile(fileName)) {
-                        imageBytes = GitHubApiUtils.fetchFileBytes(token, downloadUrl)
+                        imageBytes = GitHubApiUtils.fetchFileBytes(scope, token, downloadUrl)
                         thisLogger().info("Binary (image) file content fetched successfully")
                     } else {
-                        textContent = GitHubApiUtils.fetchFileContent(token, downloadUrl)
+                        textContent = GitHubApiUtils.fetchFileContent(scope, token, downloadUrl)
                         thisLogger().info("Text file content fetched successfully")
                     }
                 } catch (e: Exception) {
