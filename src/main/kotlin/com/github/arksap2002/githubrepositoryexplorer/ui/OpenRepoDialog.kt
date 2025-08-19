@@ -93,18 +93,14 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
                 indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
                 thisLogger().info("Validating repository: $owner/$name")
 
-                try {
-                    rootNodes = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
-                    isValid = true
+                rootNodes = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
+                isValid = rootNodes != null
+                if (isValid) {
                     thisLogger().info("Repository validation successful: $owner/$name")
-                } catch (e: Exception) {
-                    // Handle validation failure
-                    errorMessage = e.message
-                    isValid = false
-                    thisLogger().warn("Repository validation failed: $owner/$name - ${e.message}")
-                } finally {
-                    okAction.isEnabled = true
+                } else {
+                    thisLogger().warn("Repository validation failed: $owner/$name")
                 }
+                okAction.isEnabled = true
             }
 
             override fun onSuccess() {

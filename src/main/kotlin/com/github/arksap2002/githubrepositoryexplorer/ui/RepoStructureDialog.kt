@@ -131,12 +131,12 @@ class RepoStructureDialog(
                 indicator.isIndeterminate = true
                 indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.text")
                 thisLogger().info("Fetching directory children for $repoFullName at path: $dirPath")
-                try {
-                    children = GitHubApiUtils.listDirectory(scope, token, owner, name, dirPath)
+                children = GitHubApiUtils.listDirectory(scope, token, owner, name, dirPath)
+                if (children == null) {
+                    errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.dirFetchFailed", "")
+                    thisLogger().warn("Failed to fetch directory children: $dirPath")
+                } else {
                     thisLogger().info("Directory children fetched successfully: $dirPath")
-                } catch (e: Exception) {
-                    errorMessage = e.message
-                    thisLogger().warn("Failed to fetch directory children: ${e.message}")
                 }
             }
 
@@ -223,17 +223,22 @@ class RepoStructureDialog(
                 indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.progress.text")
                 thisLogger().info("Fetching file content from: $downloadUrl")
 
-                try {
-                    if (isImageFile(fileName)) {
-                        imageBytes = GitHubApiUtils.fetchFileBytes(scope, token, downloadUrl)
+                if (isImageFile(fileName)) {
+                    imageBytes = GitHubApiUtils.fetchFileBytes(scope, token, downloadUrl)
+                    if (imageBytes != null) {
                         thisLogger().info("Binary (image) file content fetched successfully")
                     } else {
-                        textContent = GitHubApiUtils.fetchFileContent(scope, token, downloadUrl)
-                        thisLogger().info("Text file content fetched successfully")
+                        errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
+                        thisLogger().warn("Failed to fetch binary file content")
                     }
-                } catch (e: Exception) {
-                    errorMessage = e.message
-                    thisLogger().warn("Failed to fetch file content: ${e.message}")
+                } else {
+                    textContent = GitHubApiUtils.fetchFileContent(scope, token, downloadUrl)
+                    if (textContent != null) {
+                        thisLogger().info("Text file content fetched successfully")
+                    } else {
+                        errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
+                        thisLogger().warn("Failed to fetch text file content")
+                    }
                 }
             }
 
