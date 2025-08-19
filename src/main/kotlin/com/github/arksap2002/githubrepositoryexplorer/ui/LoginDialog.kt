@@ -7,16 +7,21 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
 import javax.swing.JPanel
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Dialog for entering GitHub token.
  */
-class LoginDialog(project: Project) : DialogWrapper(project) {
+
+class LoginDialog(private val project: Project, private val scope: CoroutineScope) : DialogWrapper(project) {
     private val tokenField = JBTextField(GithubRepositoryExplorer.message("ui.textField.tokenSize").toInt())
 
     init {
@@ -49,31 +54,49 @@ class LoginDialog(project: Project) : DialogWrapper(project) {
 
     override fun doValidate(): ValidationInfo? {
         val token = tokenField.text.trim()
-
-        if (!isTokenValid(token)) {
+        if (token.isEmpty()) {
             return ValidationInfo(GithubRepositoryExplorer.message("loginDialog.error.invalidToken"), tokenField)
         }
-
         return null
-    }
-
-    private fun isTokenValid(token: String): Boolean {
-        val isValid = GitHubApiUtils.isTokenValid(token)
-        if (isValid) {
-            thisLogger().info("Token validation successful")
-        } else {
-            thisLogger().warn("Token validation failed")
-        }
-        return isValid
     }
 
     override fun doOKAction() {
         val token = tokenField.text.trim()
-        
-        // Save the token to the service
-        UserDataService.service().token = token
-        thisLogger().info("GitHub token saved successfully")
-        
-        close(OK_EXIT_CODE)
+
+        object : Task.Backgroundable(
+            project,
+            "Validating token",
+            false
+        ) {
+            private var isValid: Boolean = false
+            private var errorMessage: String? = null
+
+            override fun run(indicator: ProgressIndicator) {
+                indicator.isIndeterminate = true
+                indicator.text = "Validating token..."
+                thisLogger().info("Validating GitHub token in background")
+                try {
+                    isValid = GitHubApiUtils.isTokenValid(scope, token)
+                    if (isValid) thisLogger().info("Token validation successful") else thisLogger().warn("Token validation failed")
+                } catch (e: Exception) {
+                    errorMessage = e.message
+                    thisLogger().warn("Token validation failed with exception: ${e.message}")
+                }
+            }
+
+            override fun onSuccess() {
+                if (isValid) {
+                    UserDataService.service().token = token
+                    thisLogger().info("GitHub token saved successfully")
+                    close(OK_EXIT_CODE)
+                } else {
+                    Messages.showErrorDialog(
+                        project,
+                        GithubRepositoryExplorer.message("loginDialog.error.invalidToken"),
+                        GithubRepositoryExplorer.message("loginDialog.title")
+                    )
+                }
+            }
+        }.queue()
     }
 }
