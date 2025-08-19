@@ -58,6 +58,10 @@ object GitHubApiUtils {
         }
     }
 
+    private fun isSuccessful(response: HttpResponse): Boolean {
+        return response.status.value in 200..299
+    }
+
     /**
      * Validates a GitHub token by making a request to the GitHub API.
      *
@@ -80,7 +84,7 @@ object GitHubApiUtils {
                     header("Authorization", "Bearer $token")
                     header("Accept", "application/json")
                 }
-                val isValid = response.status.value in 200..299
+                val isValid = isSuccessful(response)
                 if (isValid) {
                     thisLogger().info("GitHub token validation successful")
                 } else {
@@ -101,7 +105,12 @@ object GitHubApiUtils {
      * @param downloadUrl The URL to download the raw file content.
      * @return The content of the file as a string, or null if not found or on error.
      */
-    fun fetchFileContent(scope: CoroutineScope, token: String, downloadUrl: String, engine: io.ktor.client.engine.HttpClientEngine = CIO.create()): String? {
+    fun fetchFileContent(
+        scope: CoroutineScope,
+        token: String,
+        downloadUrl: String,
+        engine: HttpClientEngine = CIO.create()
+    ): String? {
         thisLogger().info("Fetching file content from GitHub API: $downloadUrl")
         return try {
             executeWithHttpClient(
@@ -133,7 +142,12 @@ object GitHubApiUtils {
      * @param downloadUrl The URL to download the raw file content.
      * @return The content of the file as a byte array, or null if not found or on error.
      */
-    fun fetchFileBytes(scope: CoroutineScope, token: String, downloadUrl: String, engine: HttpClientEngine = CIO.create()): ByteArray? {
+    fun fetchFileBytes(
+        scope: CoroutineScope,
+        token: String,
+        downloadUrl: String,
+        engine: HttpClientEngine = CIO.create()
+    ): ByteArray? {
         thisLogger().info("Fetching binary file content from GitHub API: $downloadUrl")
         return try {
             executeWithHttpClient(
@@ -165,7 +179,14 @@ object GitHubApiUtils {
      * @param repo Repository name
      * @param path Directory path relative to repo root ("" or "dir/subdir")
      */
-    fun listDirectory(scope: CoroutineScope, token: String, owner: String, repo: String, path: String, engine: HttpClientEngine = CIO.create()): List<FileTreeNode>? {
+    fun listDirectory(
+        scope: CoroutineScope,
+        token: String,
+        owner: String,
+        repo: String,
+        path: String,
+        engine: HttpClientEngine = CIO.create()
+    ): List<FileTreeNode>? {
         val baseUrl = "https://api.github.com/repos/${owner}/${repo}/contents/"
         thisLogger().info("Listing directory (non-recursive): repo=$owner/$repo path=$path")
         return try {
@@ -183,6 +204,11 @@ object GitHubApiUtils {
                 val response: HttpResponse = client.get(url) {
                     header("Authorization", "Bearer $token")
                     header("Accept", "application/json")
+                }
+
+                if (!isSuccessful(response)) {
+                    val statusCode = response.status.value
+                    throw ClientRequestException(response, "HTTP $statusCode while fetching contents")
                 }
 
                 // Parse the JSON response
@@ -207,6 +233,47 @@ object GitHubApiUtils {
         } catch (e: Exception) {
             thisLogger().warn("listDirectory failed: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * Checks if a GitHub owner (user or organization) exists.
+     * @param token GitHub token
+     * @param owner Owner login (user or organization)
+     * @return true if the owner exists and is accessible, false otherwise
+     */
+    fun isOwnerValid(
+        scope: CoroutineScope,
+        token: String,
+        owner: String,
+        engine: HttpClientEngine = CIO.create()
+    ): Boolean {
+        thisLogger().info("Validating GitHub owner: $owner")
+        return try {
+            executeWithHttpClient(
+                scope = scope,
+                operationFailLogMessage = "Failed to validate owner",
+                notFoundLogMessage = "Owner not found: $owner",
+                notFoundMessageKey = "githubApi.error.ownerNotFound",
+                generalFailMessageKey = "githubApi.error.apiError",
+                engine = engine,
+            ) { client ->
+                val url = "https://api.github.com/users/${owner}"
+                val response: HttpResponse = client.get(url) {
+                    header("Authorization", "Bearer $token")
+                    header("Accept", "application/json")
+                }
+                val isValid = isSuccessful(response)
+                if (isValid) {
+                    thisLogger().info("GitHub owner validation successful for $owner")
+                } else {
+                    thisLogger().warn("GitHub owner validation failed: HTTP ${response.status.value}")
+                }
+                isValid
+            }
+        } catch (e: Exception) {
+            thisLogger().warn("GitHub owner validation failed with exception", e)
+            false
         }
     }
 }

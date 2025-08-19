@@ -15,12 +15,11 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
 import javax.swing.JPanel
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Dialog for entering GitHub repository information.
  */
-import kotlinx.coroutines.CoroutineScope
-
 class OpenRepoDialog(private val project: Project, private val scope: CoroutineScope) : DialogWrapper(project) {
     private val ownerField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private val nameField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
@@ -93,12 +92,22 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
                 indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
                 thisLogger().info("Validating repository: $owner/$name")
 
-                rootNodes = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
-                isValid = rootNodes != null
-                if (isValid) {
-                    thisLogger().info("Repository validation successful: $owner/$name")
+                // First, validate the owner
+                val ownerValid = GitHubApiUtils.isOwnerValid(scope, token, owner)
+                if (!ownerValid) {
+                    isValid = false
+                    errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidOwner", owner)
+                    thisLogger().warn("Owner validation failed for: $owner")
                 } else {
-                    thisLogger().warn("Repository validation failed: $owner/$name")
+                    // Owner is valid; now try to fetch the repository root directory
+                    rootNodes = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
+                    isValid = rootNodes != null
+                    if (isValid) {
+                        thisLogger().info("Repository validation successful: $owner/$name")
+                    } else {
+                        errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidRepoName", owner, name)
+                        thisLogger().warn("Repository validation failed: $owner/$name")
+                    }
                 }
                 okAction.isEnabled = true
             }
@@ -110,10 +119,11 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
                     super@OpenRepoDialog.doOKAction()
                 } else {
                     // Show error message for failed validation
-                    thisLogger().warn("Repository dialog failed: $errorMessage")
+                    val msg = errorMessage ?: GithubRepositoryExplorer.message("repoDialog.error.invalidRepo")
+                    thisLogger().warn("Repository dialog failed: $msg")
                     Messages.showErrorDialog(
                         project,
-                        GithubRepositoryExplorer.message("repoDialog.error.invalidRepo"),
+                        msg,
                         GithubRepositoryExplorer.message("repoDialog.error.title")
                     )
                 }
