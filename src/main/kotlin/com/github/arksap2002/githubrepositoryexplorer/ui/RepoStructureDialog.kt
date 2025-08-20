@@ -10,12 +10,15 @@ import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.ui.Messages
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.BinaryLightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import java.awt.BorderLayout
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 import javax.swing.JComponent
 import javax.swing.JDialog
 import javax.swing.JPanel
@@ -40,6 +43,7 @@ class RepoStructureDialog(
 ) : JDialog() {
     private val token = UserDataService.service().token
     private val repoFullName = "$owner/$name"
+    private val openedFiles = mutableSetOf<VirtualFile>()
 
     init {
         title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoFullName)
@@ -54,6 +58,27 @@ class RepoStructureDialog(
         setLocationRelativeTo(null)
 
         thisLogger().info("Repository structure dialog initialized for $repoFullName")
+
+        // Close only the files opened by this dialog instance when it closes
+        addCloseWindowListener()
+    }
+
+    private fun addCloseWindowListener() {
+        addWindowListener(object : WindowAdapter() {
+            private fun closeOpenedFiles() {
+                val fem = FileEditorManager.getInstance(project)
+                // Copy to avoid concurrent modification if closing triggers events
+                val filesToClose = openedFiles.toList()
+                filesToClose.forEach { file ->
+                    if (fem.isFileOpen(file)) {
+                        fem.closeFile(file)
+                    }
+                }
+                openedFiles.clear()
+            }
+            override fun windowClosed(e: WindowEvent?) { closeOpenedFiles() }
+            override fun windowClosing(e: WindowEvent?) { closeOpenedFiles() }
+        })
     }
 
     private fun createContentPanel(): JComponent {
@@ -166,6 +191,7 @@ class RepoStructureDialog(
 
         val virtualFile = LightVirtualFile(fileName, PlainTextFileType.INSTANCE, content)
         virtualFile.isWritable = false
+        openedFiles.add(virtualFile)
         fileEditorManager.openFile(virtualFile, true)
 
         thisLogger().info("Opened text file in editor: $fileName")
@@ -176,6 +202,7 @@ class RepoStructureDialog(
 
         val virtualFile = BinaryLightVirtualFile(fileName, bytes)
         virtualFile.isWritable = false
+        openedFiles.add(virtualFile)
         fileEditorManager.openFile(virtualFile, true)
 
         thisLogger().info("Opened image file in editor: $fileName")
