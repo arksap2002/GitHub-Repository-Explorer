@@ -12,15 +12,14 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.BinaryLightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
 import java.awt.BorderLayout
-import java.awt.event.WindowAdapter
-import java.awt.event.WindowEvent
+import java.awt.Dimension
 import javax.swing.JComponent
-import javax.swing.JDialog
 import javax.swing.JPanel
 import javax.swing.event.TreeExpansionEvent
 import javax.swing.event.TreeSelectionEvent
@@ -40,48 +39,40 @@ class RepoStructureDialog(
     private val owner: String,
     private val name: String,
     private val scope: CoroutineScope,
-) : JDialog() {
+) : DialogWrapper(project) {
     private val token = UserDataService.service().token
     private val repoFullName = "$owner/$name"
     private val openedFiles = mutableSetOf<VirtualFile>()
 
     init {
+        init()
         title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoFullName)
-        defaultCloseOperation = DISPOSE_ON_CLOSE
-
-        contentPane = createContentPanel()
-
-        // Set the size and position
-        val width = GithubRepositoryExplorer.message("ui.repoStructureDialog.width").toInt()
-        val height = GithubRepositoryExplorer.message("ui.repoStructureDialog.height").toInt()
-        setSize(width, height)
-        setLocationRelativeTo(null)
-
+        setOKButtonText("Close")
         thisLogger().info("Repository structure dialog initialized for $repoFullName")
-
-        // Close only the files opened by this dialog instance when it closes
-        addCloseWindowListener()
     }
 
-    private fun addCloseWindowListener() {
-        addWindowListener(object : WindowAdapter() {
-            private fun closeOpenedFiles() {
-                val fem = FileEditorManager.getInstance(project)
-                // Copy to avoid concurrent modification if closing triggers events
-                val filesToClose = openedFiles.toList()
-                filesToClose.forEach { file ->
-                    if (fem.isFileOpen(file)) {
-                        fem.closeFile(file)
-                    }
-                }
-                openedFiles.clear()
+    private fun closeOpenedFiles() {
+        val fem = FileEditorManager.getInstance(project)
+        val filesToClose = openedFiles.toList()
+        filesToClose.forEach { file ->
+            if (fem.isFileOpen(file)) {
+                fem.closeFile(file)
             }
-            override fun windowClosed(e: WindowEvent?) { closeOpenedFiles() }
-            override fun windowClosing(e: WindowEvent?) { closeOpenedFiles() }
-        })
+        }
+        openedFiles.clear()
     }
 
-    private fun createContentPanel(): JComponent {
+    override fun doOKAction() {
+        closeOpenedFiles()
+        super.doOKAction()
+    }
+
+    override fun doCancelAction() {
+        closeOpenedFiles()
+        super.doCancelAction()
+    }
+
+    override fun createCenterPanel(): JComponent {
         // Build the tree structure by adding only the root level nodes
         val rootNode =
             DefaultMutableTreeNode(GithubRepositoryExplorer.message("repoStructureDialog.rootNode", repoFullName))
@@ -97,6 +88,11 @@ class RepoStructureDialog(
         val panel = JPanel(BorderLayout())
         val scrollPane = JBScrollPane(tree)
         panel.add(scrollPane, BorderLayout.CENTER)
+
+        // Set preferred size from properties so DialogWrapper packs correctly
+        val width = GithubRepositoryExplorer.message("ui.repoStructureDialog.width").toInt()
+        val height = GithubRepositoryExplorer.message("ui.repoStructureDialog.height").toInt()
+        panel.preferredSize = Dimension(width, height)
 
         return panel
     }
@@ -211,6 +207,10 @@ class RepoStructureDialog(
     private fun isImageFile(fileName: String): Boolean {
         val lower = fileName.lowercase()
         return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+    }
+
+    override fun createActions(): Array<javax.swing.Action> {
+        return arrayOf(okAction)
     }
 
     private fun addTreeSelectionListener(tree: Tree) {

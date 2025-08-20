@@ -42,7 +42,7 @@ class OpenRepoAction : AnAction() {
             if (rootNodes != null) {
                 // Create and show the repository structure dialog
                 val structureDialog = RepoStructureDialog(project, rootNodes, repoOwner, repoName, scope)
-                structureDialog.show()
+                structureDialog.showAndGet()
 
                 thisLogger().info("Repository structure dialog shown for: $repoOwner/$repoName")
             } else {
