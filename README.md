@@ -12,6 +12,7 @@ GitHub-Repository-Explorer is an IntelliJ-based plugin that lets you browse any 
 
 ## Table of Contents
 - [Features](#features)
+- [Demo](#demo)
 - [Usage](#usage)
   - [Log In](#log-in)
   - [Open a Repository](#open-a-repository)
@@ -26,6 +27,10 @@ GitHub-Repository-Explorer is an IntelliJ-based plugin that lets you browse any 
 - Opens text files as read-only editor tabs
 - Opens common image files (png, jpg and jpeg) in the IDE
 - Uses GitHub API under the hood (via Ktor) with your token to avoid low rate limits and to access private repositories
+
+## Demo
+
+![Demo animation](readme-resources/Demo.gif)
 
 ## Usage
 The plugin adds a new group "GitHub Repository Explorer" under the Tools menu with the following actions:
