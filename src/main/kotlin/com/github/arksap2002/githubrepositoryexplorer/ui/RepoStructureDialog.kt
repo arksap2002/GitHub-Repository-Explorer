@@ -67,7 +67,6 @@ class RepoStructureDialog(
         addWindowListener(object : WindowAdapter() {
             private fun closeOpenedFiles() {
                 val fem = FileEditorManager.getInstance(project)
-                // Copy to avoid concurrent modification if closing triggers events
                 val filesToClose = openedFiles.toList()
                 filesToClose.forEach { file ->
                     if (fem.isFileOpen(file)) {
