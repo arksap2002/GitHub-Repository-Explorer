@@ -51,6 +51,11 @@ class LoginAction : AnAction() {
 
         if (dialog.showAndGet()) {
             thisLogger().info("GitHub token saved successfully")
+            Messages.showInfoMessage(
+                project,
+                GithubRepositoryExplorer.message("login.success.message"),
+                GithubRepositoryExplorer.message("login.success.title")
+            )
         }
     }
 
