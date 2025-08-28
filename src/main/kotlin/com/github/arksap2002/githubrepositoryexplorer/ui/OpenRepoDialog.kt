@@ -16,6 +16,8 @@ import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
 
 /**
  * Dialog for entering GitHub repository information.
@@ -24,6 +26,7 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
     private val ownerField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private val nameField = JBTextField(GithubRepositoryExplorer.message("ui.textField.repoFieldSize").toInt())
     private var rootNodes: List<FileTreeNode>? = null
+    private var canceled: Boolean = false
 
     init {
         init()
@@ -63,7 +66,7 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
     fun getRepoOwner(): String {
         return ownerField.text.trim()
     }
-    
+
     /**
      * Returns the repository name.
      */
@@ -92,47 +95,67 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
                 indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
                 thisLogger().info("Validating repository: $owner/$name")
 
-                // First, validate the owner
-                val ownerValid = GitHubApiUtils.isOwnerValid(scope, token, owner)
-                if (!ownerValid) {
-                    isValid = false
-                    errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidOwner", owner)
-                    thisLogger().warn("Owner validation failed for: $owner")
-                } else {
-                    val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
-                    isValid = ok
-                    rootNodes = nodes
-                    if (isValid) {
-                        thisLogger().info("Repository validation successful: $owner/$name")
+                try {
+                    // First, validate the owner
+                    val ownerValid = GitHubApiUtils.isOwnerValid(scope, token, owner)
+                    if (!ownerValid) {
+                        isValid = false
+                        errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidOwner", owner)
+                        thisLogger().warn("Owner validation failed for: $owner")
                     } else {
-                        errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidRepoName", owner, name)
-                        thisLogger().warn("Repository validation failed: $owner/$name")
+                        val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
+                        isValid = ok
+                        rootNodes = nodes
+                        if (isValid) {
+                            thisLogger().info("Repository validation successful: $owner/$name")
+                        } else {
+                            errorMessage =
+                                GithubRepositoryExplorer.message("repoDialog.error.invalidRepoName", owner, name)
+                            thisLogger().warn("Repository validation failed: $owner/$name")
+                        }
                     }
+                } catch (_: CancellationException) {
+                    thisLogger().info("Repository validation was canceled")
+                } catch (e: Exception) {
+                    errorMessage = e.message
+                    thisLogger().warn("Repository validation failed with exception: ${e.message}")
                 }
-                okAction.isEnabled = true
             }
 
             override fun onSuccess() {
-                if (isValid) {
-                    // Handle successful validation
-                    thisLogger().info("Repository dialog completed successfully")
-                    super@OpenRepoDialog.doOKAction()
-                } else {
-                    // Show error message for failed validation
-                    val msg = errorMessage ?: GithubRepositoryExplorer.message("repoDialog.error.invalidRepo")
-                    thisLogger().warn("Repository dialog failed: $msg")
-                    Messages.showErrorDialog(
-                        project,
-                        msg,
-                        GithubRepositoryExplorer.message("repoDialog.error.title")
-                    )
+                // Re-enable OK action before attempting to close the dialog
+                isOKActionEnabled = true
+                when {
+                    isValid -> {
+                        // Handle successful validation
+                        thisLogger().info("Repository dialog completed successfully")
+                        super@OpenRepoDialog.doOKAction()
+                    }
+
+                    !canceled -> {
+                        // Show error message for failed validation
+                        val msg = errorMessage ?: GithubRepositoryExplorer.message("repoDialog.error.invalidRepo")
+                        thisLogger().warn("Repository dialog failed: $msg")
+                        Messages.showErrorDialog(
+                            project,
+                            msg,
+                            GithubRepositoryExplorer.message("repoDialog.error.title")
+                        )
+                    }
                 }
             }
         }.queue()
     }
 
     override fun doOKAction() {
+        isOKActionEnabled = false
         validateRepositoryWithProgress()
-        okAction.isEnabled = false
+    }
+
+    override fun doCancelAction() {
+        thisLogger().info("Open repository dialog canceled by user; canceling background tasks")
+        scope.cancel("Open repository dialog canceled")
+        canceled = true
+        super.doCancelAction()
     }
 }

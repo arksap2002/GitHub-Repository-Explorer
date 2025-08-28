@@ -16,6 +16,8 @@ import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
 
 /**
  * Dialog for entering GitHub token.
@@ -23,6 +25,8 @@ import kotlinx.coroutines.CoroutineScope
 
 class LoginDialog(private val project: Project, private val scope: CoroutineScope) : DialogWrapper(project) {
     private val tokenField = JBTextField(GithubRepositoryExplorer.message("ui.textField.tokenSize").toInt())
+
+    private var canceled: Boolean = false
 
     init {
         init()
@@ -61,6 +65,8 @@ class LoginDialog(private val project: Project, private val scope: CoroutineScop
     }
 
     override fun doOKAction() {
+        isOKActionEnabled = false
+
         val token = tokenField.text.trim()
 
         object : Task.Backgroundable(
@@ -78,6 +84,8 @@ class LoginDialog(private val project: Project, private val scope: CoroutineScop
                 try {
                     isValid = GitHubApiUtils.isTokenValid(scope, token)
                     if (isValid) thisLogger().info("Token validation successful") else thisLogger().warn("Token validation failed")
+                } catch (_: CancellationException) {
+                    thisLogger().info("Token validation was canceled")
                 } catch (e: Exception) {
                     errorMessage = e.message
                     thisLogger().warn("Token validation failed with exception: ${e.message}")
@@ -85,18 +93,28 @@ class LoginDialog(private val project: Project, private val scope: CoroutineScop
             }
 
             override fun onSuccess() {
-                if (isValid) {
-                    UserDataService.service().token = token
-                    thisLogger().info("GitHub token saved successfully")
-                    close(OK_EXIT_CODE)
-                } else {
-                    Messages.showErrorDialog(
+                when {
+                    isValid -> {
+                        UserDataService.service().token = token
+                        thisLogger().info("GitHub token validation successful")
+                        close(OK_EXIT_CODE)
+                    }
+
+                    !canceled -> Messages.showErrorDialog(
                         project,
                         GithubRepositoryExplorer.message("loginDialog.error.invalidToken"),
                         GithubRepositoryExplorer.message("loginDialog.title")
                     )
                 }
+                isOKActionEnabled = true
             }
         }.queue()
+    }
+
+    override fun doCancelAction() {
+        thisLogger().info("Login dialog canceled by user; canceling background tasks")
+        scope.cancel("Login dialog canceled")
+        canceled = true
+        super.doCancelAction()
     }
 }

@@ -12,6 +12,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -50,6 +51,8 @@ object GitHubApiUtils {
                     )
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             thisLogger().error(operationFailLogMessage, e)
             throw Exception(GithubRepositoryExplorer.message(generalFailMessageKey, e.message ?: ""))
@@ -92,6 +95,8 @@ object GitHubApiUtils {
                 }
                 isValid
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             thisLogger().warn("GitHub token validation failed with exception", e)
             false
@@ -134,6 +139,8 @@ object GitHubApiUtils {
                 }
                 Pair(success, content)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             thisLogger().warn("fetchFileContent failed: ${e.message}")
             Pair(false, "")
@@ -176,6 +183,8 @@ object GitHubApiUtils {
                 }
                 Pair(success, bytes)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             thisLogger().warn("fetchFileBytes failed: ${e.message}")
             Pair(false, ByteArray(0))
@@ -240,6 +249,8 @@ object GitHubApiUtils {
 
                 Pair(true, result)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             thisLogger().warn("listDirectory failed: ${e.message}")
             Pair(false, emptyList())
@@ -281,6 +292,8 @@ object GitHubApiUtils {
                 }
                 isValid
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             thisLogger().warn("GitHub owner validation failed with exception", e)
             false
