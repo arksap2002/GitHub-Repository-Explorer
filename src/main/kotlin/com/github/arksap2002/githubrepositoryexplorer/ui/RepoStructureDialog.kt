@@ -16,6 +16,7 @@ import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.BinaryLightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
+import com.intellij.util.containers.ContainerUtil
 import java.awt.BorderLayout
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
@@ -47,9 +48,8 @@ class RepoStructureDialog(
     private val repoFullName = "$owner/$name"
     private val openedFiles = mutableSetOf<VirtualFile>()
 
-    // Track in-flight fetches to avoid duplicate concurrent operations per file/dir
-    private val inFlightDirFetches: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
-    private val inFlightFileFetches: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+    private val inFlightDirFetches: MutableSet<String> = ContainerUtil.newConcurrentSet()
+    private val inFlightFileFetches: MutableSet<String> = ContainerUtil.newConcurrentSet()
 
     private var canceled = false
 
