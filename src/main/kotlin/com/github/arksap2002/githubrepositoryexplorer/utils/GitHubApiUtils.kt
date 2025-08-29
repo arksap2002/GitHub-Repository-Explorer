@@ -11,10 +11,8 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -37,7 +35,6 @@ object GitHubApiUtils {
         val client = HttpClient(engine)
         return try {
             runBlocking(scope.coroutineContext) {
-                delay(10.seconds)
                 val response: HttpResponse = client.get(url) {
                     header("Authorization", "Bearer $token")
                     header("Accept", accept)
