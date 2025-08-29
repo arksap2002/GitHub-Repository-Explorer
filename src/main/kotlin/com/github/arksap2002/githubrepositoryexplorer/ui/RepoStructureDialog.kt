@@ -7,8 +7,11 @@ import com.github.arksap2002.githubrepositoryexplorer.utils.GitHubApiUtils
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileTypes.PlainTextFileType
-import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.progress.Task
+import com.intellij.platform.ide.progress.withBackgroundProgress
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.asContextElement
+import kotlinx.coroutines.launch
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.ui.Messages
@@ -16,6 +19,7 @@ import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.BinaryLightVirtualFile
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.treeStructure.Tree
+import com.intellij.util.containers.ContainerUtil
 import java.awt.BorderLayout
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
@@ -29,6 +33,9 @@ import javax.swing.event.TreeWillExpandListener
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withContext
 
 /**
  * Window for displaying the GitHub repository structure as a tree.
@@ -45,6 +52,9 @@ class RepoStructureDialog(
     private val repoFullName = "$owner/$name"
     private val openedFiles = mutableSetOf<VirtualFile>()
 
+    private val inFlightDirFetches: MutableSet<String> = ContainerUtil.newConcurrentSet()
+    private val inFlightFileFetches: MutableSet<String> = ContainerUtil.newConcurrentSet()
+
     init {
         title = GithubRepositoryExplorer.message("repoStructureDialog.title", repoFullName)
         defaultCloseOperation = DISPOSE_ON_CLOSE
@@ -59,13 +69,15 @@ class RepoStructureDialog(
 
         thisLogger().info("Repository structure dialog initialized for $repoFullName")
 
-        // Close only the files opened by this dialog instance when it closes
         addCloseWindowListener()
     }
 
     private fun addCloseWindowListener() {
         addWindowListener(object : WindowAdapter() {
-            private fun closeOpenedFiles() {
+            private fun processWindowClosing() {
+                thisLogger().info("Repository structure dialog closed; canceling background tasks and closing files")
+                scope.cancel("RepoStructureDialog closed")
+
                 val fem = FileEditorManager.getInstance(project)
                 val filesToClose = openedFiles.toList()
                 filesToClose.forEach { file ->
@@ -75,8 +87,14 @@ class RepoStructureDialog(
                 }
                 openedFiles.clear()
             }
-            override fun windowClosed(e: WindowEvent?) { closeOpenedFiles() }
-            override fun windowClosing(e: WindowEvent?) { closeOpenedFiles() }
+
+            override fun windowClosed(e: WindowEvent?) {
+                processWindowClosing()
+            }
+
+            override fun windowClosing(e: WindowEvent?) {
+                processWindowClosing()
+            }
         })
     }
 
@@ -143,46 +161,50 @@ class RepoStructureDialog(
         dirNode: DefaultMutableTreeNode,
         dirPath: String
     ) {
-        object : Task.Backgroundable(
-            project,
-            GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.title"),
-            false
-        ) {
-            private var children: List<FileTreeNode>? = null
-            private var childrenOk: Boolean = false
-            private var errorMessage: String? = null
-
-            override fun run(indicator: ProgressIndicator) {
-                indicator.isIndeterminate = true
-                indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.text")
-                thisLogger().info("Fetching directory children for $repoFullName at path: $dirPath")
-                val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token, owner, name, dirPath)
-                childrenOk = ok
-                children = nodes
-                if (!childrenOk) {
-                    errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.dirFetchFailed", "")
-                    thisLogger().warn("Failed to fetch directory children: $dirPath")
-                } else {
-                    thisLogger().info("Directory children fetched successfully: $dirPath")
+        // Ensure only one in-flight task per directory path
+        if (!inFlightDirFetches.add(dirPath)) {
+            thisLogger().info("Skip duplicate directory fetch for $dirPath")
+            return
+        }
+        scope.launch {
+            var children: List<FileTreeNode>? = null
+            var success = false
+            var errorMessage: String? = null
+            withBackgroundProgress(
+                project,
+                GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.title")
+            ) {
+                try {
+                    val result = GitHubApiUtils.listDirectory(token, owner, name, dirPath)
+                    success = result.success
+                    children = result.data
+                } catch (e: Exception) {
+                    errorMessage = e.message
+                } finally {
+                    inFlightDirFetches.remove(dirPath)
                 }
             }
 
-            override fun onSuccess() {
-                if (childrenOk) {
-                    buildTreeNodes(dirNode, children ?: emptyList())
-                    model.nodeStructureChanged(dirNode)
-                } else {
-                    Messages.showErrorDialog(
-                        project,
-                        GithubRepositoryExplorer.message(
-                            "repoStructureDialog.error.dirFetchFailed",
-                            errorMessage ?: "Unknown error"
-                        ),
-                        GithubRepositoryExplorer.message("repoStructureDialog.error.title")
-                    )
+            withContext(Dispatchers.EDT + ModalityState.any().asContextElement()) {
+                when {
+                    success -> {
+                        buildTreeNodes(dirNode, children ?: emptyList())
+                        model.nodeStructureChanged(dirNode)
+                    }
+
+                    else -> {
+                        Messages.showErrorDialog(
+                            project,
+                            GithubRepositoryExplorer.message(
+                                "repoStructureDialog.error.dirFetchFailed",
+                                errorMessage ?: "Unknown error"
+                            ),
+                            GithubRepositoryExplorer.message("repoStructureDialog.error.title")
+                        )
+                    }
                 }
             }
-        }.queue()
+        }
     }
 
     private fun openTextFileInEditor(fileName: String, content: String) {
@@ -238,45 +260,48 @@ class RepoStructureDialog(
     }
 
     private fun fetchFileContentWithProgress(downloadUrl: String, fileName: String) {
-        object : Task.Backgroundable(
-            project,
-            GithubRepositoryExplorer.message("repoStructureDialog.progress.title"),
-            false
-        ) {
-            private var textContent: String? = null
-            private var imageBytes: ByteArray? = null
-            private var errorMessage: String? = null
-
-            override fun run(indicator: ProgressIndicator) {
-                indicator.isIndeterminate = true
-                indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.progress.text")
-                thisLogger().info("Fetching file content from: $downloadUrl")
-
-                if (isImageFile(fileName)) {
-                    val (ok, bytes) = GitHubApiUtils.fetchFileBytes(scope, token, downloadUrl)
-                    if (ok) {
-                        imageBytes = bytes
-                        thisLogger().info("Binary (image) file content fetched successfully")
+        // Ensure only one in-flight task per file download URL
+        if (!inFlightFileFetches.add(downloadUrl)) {
+            return
+        }
+        scope.launch {
+            var textContent: String? = null
+            var imageBytes: ByteArray? = null
+            var errorMessage: String? = null
+            withBackgroundProgress(
+                project,
+                GithubRepositoryExplorer.message("repoStructureDialog.progress.title")
+            ) {
+                try {
+                    thisLogger().info("Fetching file content from: $downloadUrl")
+                    if (isImageFile(fileName)) {
+                        val resultBytes = GitHubApiUtils.fetchFileBytes(token, downloadUrl)
+                        if (resultBytes.success) {
+                            imageBytes = resultBytes.data
+                        } else {
+                            errorMessage =
+                                GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
+                        }
                     } else {
-                        errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
-                        thisLogger().warn("Failed to fetch binary file content")
+                        val resultText = GitHubApiUtils.fetchFileContent(token, downloadUrl)
+                        if (resultText.success) {
+                            textContent = resultText.data
+                        } else {
+                            errorMessage =
+                                GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
+                        }
                     }
-                } else {
-                    val (ok, text) = GitHubApiUtils.fetchFileContent(scope, token, downloadUrl)
-                    if (ok) {
-                        textContent = text
-                        thisLogger().info("Text file content fetched successfully")
-                    } else {
-                        errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
-                        thisLogger().warn("Failed to fetch text file content")
-                    }
+                } catch (e: Exception) {
+                    errorMessage = e.message
+                } finally {
+                    inFlightFileFetches.remove(downloadUrl)
                 }
             }
 
-            override fun onSuccess() {
+            withContext(Dispatchers.EDT + ModalityState.any().asContextElement()) {
                 when {
-                    imageBytes != null -> openImageInEditor(fileName, imageBytes!!)
-                    textContent != null -> openTextFileInEditor(fileName, textContent!!)
+                    imageBytes != null -> openImageInEditor(fileName, imageBytes)
+                    textContent != null -> openTextFileInEditor(fileName, textContent)
                     else -> {
                         Messages.showErrorDialog(
                             project,
@@ -289,6 +314,6 @@ class RepoStructureDialog(
                     }
                 }
             }
-        }.queue()
+        }
     }
 }

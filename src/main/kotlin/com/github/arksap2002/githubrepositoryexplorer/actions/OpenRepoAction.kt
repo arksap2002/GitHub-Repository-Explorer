@@ -1,16 +1,15 @@
 package com.github.arksap2002.githubrepositoryexplorer.actions
 
 import com.github.arksap2002.githubrepositoryexplorer.GithubRepositoryExplorer
+import com.github.arksap2002.githubrepositoryexplorer.services.GithubRepositoryExplorerProjectScope
 import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
 import com.github.arksap2002.githubrepositoryexplorer.ui.OpenRepoDialog
 import com.github.arksap2002.githubrepositoryexplorer.ui.RepoStructureDialog
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 /**
  * Action to open and validate a GitHub repository.
@@ -29,7 +28,7 @@ class OpenRepoAction : AnAction() {
 
         val project = e.project ?: return
 
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val scope = project.service<GithubRepositoryExplorerProjectScope>().childScope("OpenRepoAction")
 
         // Show a dialog to enter repository details
         val dialog = OpenRepoDialog(project, scope)
