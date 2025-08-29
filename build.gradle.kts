@@ -51,6 +51,8 @@ dependencies {
     testImplementation("io.ktor:ktor-client-core:3.2.3")
     testImplementation("io.ktor:ktor-client-cio:3.2.3")
 
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.4")
+
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
         create(providers.gradleProperty("platformType"), providers.gradleProperty("platformVersion"))
