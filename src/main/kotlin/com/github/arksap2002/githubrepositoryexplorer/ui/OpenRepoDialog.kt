@@ -103,9 +103,9 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
                         errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidOwner", owner)
                         thisLogger().warn("Owner validation failed for: $owner")
                     } else {
-                        val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
-                        isValid = ok
-                        rootNodes = nodes
+                        val result = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
+                        isValid = result.success
+                        rootNodes = result.data
                         if (isValid) {
                             thisLogger().info("Repository validation successful: $owner/$name")
                         } else {

@@ -170,7 +170,7 @@ class RepoStructureDialog(
             false
         ) {
             private var children: List<FileTreeNode>? = null
-            private var childrenOk: Boolean = false
+            private var success: Boolean = false
             private var errorMessage: String? = null
             private var canceled: Boolean = false
 
@@ -179,10 +179,10 @@ class RepoStructureDialog(
                 indicator.text = GithubRepositoryExplorer.message("repoStructureDialog.dir.progress.text")
                 thisLogger().info("Fetching directory children for $repoFullName at path: $dirPath")
                 try {
-                    val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token, owner, name, dirPath)
-                    childrenOk = ok
-                    children = nodes
-                    if (!childrenOk) {
+                    val result = GitHubApiUtils.listDirectory(scope, token, owner, name, dirPath)
+                    success = result.success
+                    children = result.data
+                    if (!success) {
                         errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.dirFetchFailed", "")
                         thisLogger().warn("Failed to fetch directory children: $dirPath")
                     } else {
@@ -196,7 +196,7 @@ class RepoStructureDialog(
 
             override fun onSuccess() {
                 when {
-                    childrenOk -> {
+                    success -> {
                         buildTreeNodes(dirNode, children ?: emptyList())
                         model.nodeStructureChanged(dirNode)
                     }
@@ -296,18 +296,18 @@ class RepoStructureDialog(
 
                 try {
                     if (isImageFile(fileName)) {
-                        val (ok, bytes) = GitHubApiUtils.fetchFileBytes(scope, token, downloadUrl)
-                        if (ok) {
-                            imageBytes = bytes
+                        val resultBytes = GitHubApiUtils.fetchFileBytes(scope, token, downloadUrl)
+                        if (resultBytes.success) {
+                            imageBytes = resultBytes.data
                             thisLogger().info("Binary (image) file content fetched successfully")
                         } else {
                             errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
                             thisLogger().warn("Failed to fetch binary file content")
                         }
                     } else {
-                        val (ok, text) = GitHubApiUtils.fetchFileContent(scope, token, downloadUrl)
-                        if (ok) {
-                            textContent = text
+                        val resultText = GitHubApiUtils.fetchFileContent(scope, token, downloadUrl)
+                        if (resultText.success) {
+                            textContent = resultText.data
                             thisLogger().info("Text file content fetched successfully")
                         } else {
                             errorMessage = GithubRepositoryExplorer.message("repoStructureDialog.error.fetchFailed", "")
