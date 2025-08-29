@@ -29,18 +29,6 @@ class LoginAction : AnAction() {
 
         val project = e.project ?: return
 
-        if (UserDataService.isUserLoggedIn()) {
-            // Log and show notification that the user is already logged in
-            thisLogger().info("User is already logged in, showing notification")
-            Messages.showInfoMessage(
-                project,
-                GithubRepositoryExplorer.message("login.alreadyLoggedIn.message"),
-                GithubRepositoryExplorer.message("login.alreadyLoggedIn.title")
-            )
-            return
-        }
-
-        // Show login dialog if user is not logged in
         showLoginDialog(project)
     }
 

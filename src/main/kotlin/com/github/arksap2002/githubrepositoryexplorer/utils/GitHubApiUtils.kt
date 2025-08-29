@@ -11,9 +11,8 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -23,8 +22,7 @@ import kotlinx.serialization.json.Json
 object GitHubApiUtils {
     data class OperationResult<T>(val success: Boolean, val data: T)
 
-    private fun <T> withAuthorizedGet(
-        scope: CoroutineScope,
+    private suspend fun <T> withAuthorizedGet(
         engine: HttpClientEngine,
         url: String,
         token: String,
@@ -34,7 +32,7 @@ object GitHubApiUtils {
     ): T {
         val client = HttpClient(engine)
         return try {
-            runBlocking(scope.coroutineContext) {
+            withContext(Dispatchers.IO) {
                 val response: HttpResponse = client.get(url) {
                     header("Authorization", "Bearer $token")
                     header("Accept", accept)
@@ -49,8 +47,6 @@ object GitHubApiUtils {
                     e.message
                 )
             )
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: Exception) {
             thisLogger().warn("Error: ${e.message}")
             onError()
@@ -69,10 +65,12 @@ object GitHubApiUtils {
      * @param token The GitHub token to validate
      * @return true if the token is valid, false otherwise
      */
-    fun isTokenValid(scope: CoroutineScope, token: String, engine: HttpClientEngine = CIO.create()): Boolean {
+    suspend fun isTokenValid(token: String, engine: HttpClientEngine = CIO.create()): Boolean {
         thisLogger().info("Validating GitHub token")
         val url = "https://api.github.com/user"
-        return withAuthorizedGet(scope, engine, url, token, "application/json", onError = { false }) { response ->
+        val onError = { false }
+
+        return withAuthorizedGet(engine, url, token, "application/json", onError) { response ->
             isSuccessful(response)
         }
     }
@@ -84,20 +82,15 @@ object GitHubApiUtils {
      * @param downloadUrl The URL to download the raw file content.
      * @return The content of the file as a string, or null if not found or on error.
      */
-    fun fetchFileContent(
-        scope: CoroutineScope,
+    suspend fun fetchFileContent(
         token: String,
         downloadUrl: String,
         engine: HttpClientEngine = CIO.create()
     ): OperationResult<String> {
         thisLogger().info("Fetching file content from GitHub API: $downloadUrl")
-        return withAuthorizedGet(
-            scope,
-            engine,
-            downloadUrl,
-            token,
-            "application/vnd.github.v3.raw",
-            onError = { OperationResult(false, "") }) { response ->
+        val onError = { OperationResult(false, "") }
+
+        return withAuthorizedGet(engine, downloadUrl, token, "application/vnd.github.v3.raw", onError) { response ->
             OperationResult(isSuccessful(response), response.bodyAsText())
         }
     }
@@ -109,20 +102,15 @@ object GitHubApiUtils {
      * @param downloadUrl The URL to download the raw file content.
      * @return The content of the file as a byte array, or null if not found or on error.
      */
-    fun fetchFileBytes(
-        scope: CoroutineScope,
+    suspend fun fetchFileBytes(
         token: String,
         downloadUrl: String,
         engine: HttpClientEngine = CIO.create()
     ): OperationResult<ByteArray> {
         thisLogger().info("Fetching binary file content from GitHub API: $downloadUrl")
-        return withAuthorizedGet(
-            scope,
-            engine,
-            downloadUrl,
-            token,
-            "application/vnd.github.v3.raw",
-            onError = { OperationResult(false, ByteArray(0)) }) { response ->
+        val onError = { OperationResult(false, ByteArray(0)) }
+
+        return withAuthorizedGet(engine, downloadUrl, token, "application/vnd.github.v3.raw", onError) { response ->
             OperationResult(isSuccessful(response), response.body())
         }
     }
@@ -150,8 +138,7 @@ object GitHubApiUtils {
      * @param repo Repository name
      * @param path Directory path relative to repo root ("" or "dir/subdir")
      */
-    fun listDirectory(
-        scope: CoroutineScope,
+    suspend fun listDirectory(
         token: String,
         owner: String,
         repo: String,
@@ -160,13 +147,9 @@ object GitHubApiUtils {
     ): OperationResult<List<FileTreeNode>> {
         val baseUrl = "https://api.github.com/repos/${owner}/${repo}/contents/"
         val url = if (path.isEmpty()) baseUrl else "$baseUrl$path"
-        return withAuthorizedGet(
-            scope,
-            engine,
-            url,
-            token,
-            "application/json",
-            onError = { OperationResult(false, emptyList()) }) { response ->
+        val onError = { OperationResult(false, emptyList<FileTreeNode>()) }
+
+        return withAuthorizedGet(engine, url, token, "application/json", onError) { response ->
             OperationResult(true, parseDirectoryContents(response.bodyAsText()))
         }
     }
@@ -177,15 +160,16 @@ object GitHubApiUtils {
      * @param owner Owner login (user or organization)
      * @return true if the owner exists and is accessible, false otherwise
      */
-    fun isOwnerValid(
-        scope: CoroutineScope,
+    suspend fun isOwnerValid(
         token: String,
         owner: String,
         engine: HttpClientEngine = CIO.create()
     ): Boolean {
         thisLogger().info("Validating GitHub owner: $owner")
         val url = "https://api.github.com/users/${owner}"
-        return withAuthorizedGet(scope, engine, url, token, "application/json", onError = { false }) { response ->
+        val onError = { false }
+
+        return withAuthorizedGet(engine, url, token, "application/json", onError) { response ->
             isSuccessful(response)
         }
     }
