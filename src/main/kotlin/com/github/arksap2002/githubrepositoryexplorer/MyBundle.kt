@@ -19,3 +19,4 @@ object MyBundle : DynamicBundle(BUNDLE) {
         getLazyMessage(key, *params)
 }
 
+
