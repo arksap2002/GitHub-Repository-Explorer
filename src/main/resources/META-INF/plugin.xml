@@ -6,10 +6,20 @@
 
     <depends>com.intellij.modules.platform</depends>
 
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <resource-bundle>messages.GithubRepositoryExplorer</resource-bundle>
 
-    <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.arksap2002.githubrepositoryexplorer.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.arksap2002.githubrepositoryexplorer.startup.MyProjectActivity" />
-    </extensions>
+    <actions>
+        <group id="GithubRepositoryExplorer.ToolsMenu"
+               text="GitHub Repository Explorer"
+               description="GitHub repository explorer actions"
+               popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="GithubRepositoryExplorer.Login" 
+                    class="com.github.arksap2002.githubrepositoryexplorer.actions.LoginAction"/>
+            <action id="GithubRepositoryExplorer.Logout"
+                    class="com.github.arksap2002.githubrepositoryexplorer.actions.LogoutAction"/>
+            <action id="GithubRepositoryExplorer.OpenRepo"
+                    class="com.github.arksap2002.githubrepositoryexplorer.actions.OpenRepoAction"/>
+        </group>
+    </actions>
 </idea-plugin>
