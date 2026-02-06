@@ -2,6 +2,7 @@ package com.github.arksap2002.githubrepositoryexplorer.utils
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FileTreeNodeTest {
@@ -15,5 +16,11 @@ class FileTreeNodeTest {
     fun `isProcessed is false by default`() {
         val node = FileTreeNode(name = "src", path = "src", type = "dir")
         assertFalse(node.isProcessed)
+    }
+
+    @Test
+    fun `isProcessed is true by default`() {
+        val node = FileTreeNode(name = "src", path = "src", type = "dir")
+        assertTrue(node.isProcessed)
     }
 }
