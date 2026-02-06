@@ -99,5 +99,5 @@ class LoginDialog(private val project: Project, private val scope: CoroutineScop
             }
         }.queue()
     }
-
+}
 
