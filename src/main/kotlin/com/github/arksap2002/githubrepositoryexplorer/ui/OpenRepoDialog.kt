@@ -5,8 +5,11 @@ import com.github.arksap2002.githubrepositoryexplorer.services.UserDataService
 import com.github.arksap2002.githubrepositoryexplorer.utils.FileTreeNode
 import com.github.arksap2002.githubrepositoryexplorer.utils.GitHubApiUtils
 import com.intellij.openapi.diagnostic.thisLogger
-import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.progress.Task
+import com.intellij.platform.ide.progress.withBackgroundProgress
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.asContextElement
+import kotlinx.coroutines.launch
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
@@ -16,6 +19,9 @@ import com.intellij.util.ui.FormBuilder
 import javax.swing.JComponent
 import javax.swing.JPanel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withContext
 
 /**
  * Dialog for entering GitHub repository information.
@@ -63,7 +69,7 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
     fun getRepoOwner(): String {
         return ownerField.text.trim()
     }
-    
+
     /**
      * Returns the repository name.
      */
@@ -77,42 +83,34 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
         val name = nameField.text.trim()
         val token = UserDataService.service().token
 
-        // Create a background task for repository validation
-        object : Task.Backgroundable(
-            project,
-            GithubRepositoryExplorer.message("repoDialog.validation.title"),
-            false
-        ) {
-            private var isValid = false
-            private var errorMessage: String? = null
+        scope.launch {
+            var isValid = false
+            var errorMessage: String? = null
 
-            override fun run(indicator: ProgressIndicator) {
-                // Set up a progress indicator
-                indicator.isIndeterminate = true
-                indicator.text = GithubRepositoryExplorer.message("repoDialog.validation.message")
-                thisLogger().info("Validating repository: $owner/$name")
-
-                // First, validate the owner
-                val ownerValid = GitHubApiUtils.isOwnerValid(scope, token, owner)
-                if (!ownerValid) {
-                    isValid = false
-                    errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidOwner", owner)
-                    thisLogger().warn("Owner validation failed for: $owner")
-                } else {
-                    val (ok, nodes) = GitHubApiUtils.listDirectory(scope, token, owner, name, "")
-                    isValid = ok
-                    rootNodes = nodes
-                    if (isValid) {
-                        thisLogger().info("Repository validation successful: $owner/$name")
+            // Create a background task for repository validation
+            withBackgroundProgress(project, GithubRepositoryExplorer.message("repoDialog.validation.title")) {
+                try {
+                    thisLogger().info("Validating repository: $owner/$name")
+                    val ownerValid = GitHubApiUtils.isOwnerValid(token, owner)
+                    if (!ownerValid) {
+                        isValid = false
+                        errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidOwner", owner)
                     } else {
-                        errorMessage = GithubRepositoryExplorer.message("repoDialog.error.invalidRepoName", owner, name)
-                        thisLogger().warn("Repository validation failed: $owner/$name")
+                        val result = GitHubApiUtils.listDirectory(token, owner, name, "")
+                        isValid = result.success
+                        rootNodes = result.data
+                        if (!isValid) {
+                            errorMessage =
+                                GithubRepositoryExplorer.message("repoDialog.error.invalidRepoName", owner, name)
+                        }
                     }
+                } catch (e: Exception) {
+                    errorMessage = e.message
                 }
-                okAction.isEnabled = true
             }
 
-            override fun onSuccess() {
+            withContext(Dispatchers.EDT + ModalityState.any().asContextElement()) {
+                isOKActionEnabled = true
                 if (isValid) {
                     // Handle successful validation
                     thisLogger().info("Repository dialog completed successfully")
@@ -128,11 +126,17 @@ class OpenRepoDialog(private val project: Project, private val scope: CoroutineS
                     )
                 }
             }
-        }.queue()
+        }
     }
 
     override fun doOKAction() {
+        isOKActionEnabled = false
         validateRepositoryWithProgress()
-        okAction.isEnabled = false
+    }
+
+    override fun doCancelAction() {
+        thisLogger().info("Open repository dialog canceled by user; canceling background tasks")
+        scope.cancel("Open repository dialog canceled")
+        super.doCancelAction()
     }
 }
