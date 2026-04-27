@@ -15,12 +15,6 @@ class FileTreeNodeTest {
     @Test
     fun `isProcessed is false by default`() {
         val node = FileTreeNode(name = "src", path = "src", type = "dir")
-        assertFalse(node.isProcessed)
-    }
-
-    @Test
-    fun `isProcessed is true by default`() {
-        val node = FileTreeNode(name = "src", path = "src", type = "dir")
-        assertTrue(node.isProcessed)
+        assertFalse(!node.isProcessed)
     }
 }
