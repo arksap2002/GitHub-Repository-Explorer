@@ -49,8 +49,10 @@ class LoginAction : AnAction() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val dialog = LoginDialog(project, scope)
 
+        val infoMessage = "GitHub token saved successfully"
+
         if (dialog.showAndGet()) {
-            thisLogger().info("GitHub token saved successfully")
+            thisLogger().info(infoMessage)
             Messages.showInfoMessage(
                 project,
                 GithubRepositoryExplorer.message("login.success.message"),
